@@ -1,28 +1,11 @@
+from enum import Flag
+from tkinter import font
+from turtle import color
 import pygame
 import sys
 import math
 
-
-#### BASIC FUNCTIONS
-# def read_file(path):
-#     file = open(path, 'r')
-#     lines  = []
-#     for line in file.readlines():
-#         lines.append(line)
-#     file.close()
-
-#     return lines
-
-# def write_file(path, text):
-#     # print(text)
-#     file = open(path, 'w')
-#     final = []
-#     for text_ in text:
-#         text_ += '\n'
-#         final.append(text_)
-#     file.writelines(final)
-
-#     file.close()
+## BASIC FUNCTIONS
 
 def check_key_pressed(key):
     keys = pygame.key.get_pressed()
@@ -110,19 +93,25 @@ def encrypt_decrypt(text_to_encrypt, mode=0):
 
 
 
-
 class APPLICATION():
     
     pygame.init()
 
-    def __init__(self, screenRes,max_fps = 60, show_fps = False) -> None:
+    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, cam_Smooth=True, edit_mode=False, editor_width=500) -> None:
              ##WINDOW PARAMETERS AND VARIABLES
         self.screenRes = screenRes
+        self.displayRes = displayRes
         self.max_fps = max_fps
         self.show_fps = show_fps
-        self.screen = pygame.display.set_mode(self.screenRes)
+        self.screenX, self.screenY = self.screenRes
+        if edit_mode == True:
+            self.screen = pygame.display.set_mode((self.screenX + editor_width, self.screenY))
+        else:
+            self.screen = pygame.display.set_mode(self.screenRes)
+        self.display = pygame.Surface(self.displayRes)
             ##GAMEPLAY VARIABLES
         self.objects =  {}
+        self.uiTexts = {}
         self.running = True
         self.clock = pygame.time.Clock()
         self.deltatime = 0
@@ -131,16 +120,26 @@ class APPLICATION():
         self.cameray = 0
         self.camDelayX = 1.7
         self.camDelayY = 1
-        self.cameraxSpeed = 500
-        self.cameraySpeed = 500
+        self.cameraxSpeed = 1
+        self.cameraySpeed = 1
+        self.camBeforeEditMode = (0,0)
         self.objToFollow = ''
+        self.smooth = cam_Smooth
 
           ##Editor mode
-        self.Editor = EDITOR()
-        self.is_editorMode = False
+        self.Editor = EDITOR(self)
+        self.is_editorMode = edit_mode
         self.left_clicking = False
+        self.right_clicking = False
+        if self.is_editorMode == True:
+            self.play = False
+        else:
+            self.play = True
 
 
+
+        if self.show_fps == True:
+            self.createUIElement(UITEXT(name='FPS'))
         print('[CHECK] WINDOW initialized')
 
     def get(self, name):
@@ -148,46 +147,60 @@ class APPLICATION():
 
     def Poll_Events(self):
         self.left_clicking = False
+        self.right_clicking = False
         ##Handle window events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_F10:
-                    if self.is_editorMode == True:
-                        self.disabelEditorMode()
-                    else:
-                        self.enableEditorMode()
-
+            if self.is_editorMode == True:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_F10:
+                        if self.play == True:
+                            self.play = False
+                            self.camBeforeEditMode = (self.camerax, self.cameray)
+                        else:
+                            self.play = True
+                            self.camerax, self.cameray = self.camBeforeEditMode
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                    self.left_clicking = True
+                elif event.button == 3:
+                    self.right_clicking = True
 
 
     def update(self):
-        self.screen.fill((45, 175, 245))
+        self.display.fill((45, 175, 245))
+        self.screen.fill((0,0,0))
         self.CameraMove()
         for object in self.objects:
             curr_object = self.objects[object]
-            if curr_object.type != 'static' and self.is_editorMode == False:
+            if curr_object.type != 'static' and self.play == True:
                 curr_object.update(self.deltatime) # update the object
                 curr_object.collider(self.objects)
             self.renderObject(curr_object)
 
 
-        if self.show_fps == True and self.is_editorMode == False:
-            self.fps_counter(math.floor(self.clock.get_fps())) # display fps to the screen
+        if self.show_fps == True and self.play == True:
+            self.uiTexts['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
 
         if self.is_editorMode == True:
             self.Editor.update(self)
-        
 
-    def flip(self): # display the frame to the screen
+
+        surf = pygame.transform.scale(self.display, self.screenRes)
+        self.screen.blit(surf, (0,0))
+
+        ###ADD UI ELEMENTS
+        for ui in self.uiTexts:
+            currUI = self.uiTexts[ui]
+            self.screen.blit(currUI.text, currUI.position())
+
         self.clock.tick() #update the fps
         self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
         pygame.display.update() # show the screen to the player
+        
 
     def createObject(self, object):
         if object.name == '':
@@ -196,11 +209,12 @@ class APPLICATION():
 
         print(f"[CHECK] {object.name.upper()} initialized")
 
-    def fps_counter(self, fps):
-        if self.show_fps == True:
-            font = pygame.font.Font("Bin/assets/fonts/Roboto_Regular.ttf", 32)
-            text = font.render(f'fps: {fps} ', True,(255,255,255))
-            self.screen.blit(text, (0,0))   #diplay fps on demand
+    def createUIElement(self, ui):
+        if ui.name == '':
+            ui.name = 'uiElement_' + str(len(self.objects))
+        self.uiTexts[ui.name] = ui
+
+        print(f"[CHECK] {ui.name.upper()} initialized")
 
     def activateCameraFollow(self,name):
         self.objToFollow = name # set the cmerafollow
@@ -209,22 +223,26 @@ class APPLICATION():
         self.objToFollow = ''
 
     def CameraMove(self):
-        if self.is_editorMode == True:
+        if self.play == False:
             if check_key_pressed(pygame.K_a):
-                self.camerax += -self.cameraxSpeed * self.deltatime
+                self.camerax += -self.cameraxSpeed 
             elif check_key_pressed(pygame.K_d):
-               self.camerax += self.cameraxSpeed * self.deltatime
+               self.camerax += self.cameraxSpeed 
 
             if check_key_pressed(pygame.K_w):
-                self.cameray += -self.cameraySpeed * self.deltatime
+                self.cameray += -self.cameraySpeed
             elif check_key_pressed(pygame.K_s):
-                self.cameray += self.cameraySpeed * self.deltatime
+                self.cameray += self.cameraySpeed
         else:
             if self.objToFollow != '':
                 object = self.objects[self.objToFollow]
-                width, height = self.screenRes
-                self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX * self.deltatime
-                self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY * self.deltatime
+                width, height = self.displayRes
+                if self.smooth == True:
+                    self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX * self.deltatime
+                    self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY * self.deltatime
+                else:
+                    self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2)
+                    self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2)
 
 
     def cam_position(self):
@@ -237,7 +255,7 @@ class APPLICATION():
         self.is_editorMode = False
 
     def is_object_inside_preview(self, object):
-        x,y = self.screenRes
+        x,y = self.displayRes
         if object.displayx + object.width > 0 and object.displayx < x \
             and object.displayy + object.height > 0 and object.displayy < y:
             return True
@@ -249,13 +267,13 @@ class APPLICATION():
         object.displayy = object.rect.y - self.cameray
 
         if self.is_object_inside_preview(object) == True:
-            self.screen.blit(object.img, (object.displayx, object.displayy))
+            self.display.blit(object.img, (object.displayx, object.displayy))
 
 
 
 
 class OBJECT():
-    def __init__(self, img_path, name,type, start_pos=(0,0), function='') -> None:
+    def __init__(self, img_path, name,type, start_pos=(0,0), function='', animated=False, anim_path='') -> None:
         self.img = pygame.image.load(img_path)
         self.img_path = img_path
         self.name = name
@@ -270,6 +288,8 @@ class OBJECT():
         self.movement = [0,0]
         self.hitlist = []
         self.initialized_script = False
+        if animated == True:
+            self.animator = ANIMATOR()
 
   
     def move_by(self, x, y): # add a value to th existant position of the object
@@ -329,40 +349,74 @@ class OBJECT():
 
 class EDITOR():
 
-    def __init__(self) -> None:
-        self.Titlefont = pygame.font.Font('Bin/assets/fonts/Roboto_Regular.ttf', 32)
-        self.Textfont = pygame.font.Font('Bin/assets/fonts/Roboto_Regular.ttf', 24)
+    def __init__(self,window) -> None:
+        window.createUIElement(UITEXT(name='Titlefont', font_size=32, pos=(window.screenX, 0)))
+        window.uiTexts['Titlefont'].updateText('Game Informations')
+        window.createUIElement(UITEXT(name='SelectedObjectPos', font_size=24, pos=(window.screenX + 20, 60)))
+        window.createUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 100)))
+        window.createUIElement(UITEXT(name='GameMode', font_size=50, pos=(window.screenX / 2 - 50, 10), color=(255,0,0)))
+        self.selectedObject = ''
     def update(self, window):
-        for object in window.objects:
-            curr_object = window.objects[object]
-            pygame.draw.rect(window.screen, (124,252,0), pygame.Rect((curr_object.displayx,curr_object.displayy), (curr_object.width,curr_object.height)), width=2)
+        if self.selectedObject != '':
+            window.uiTexts['SelectedObjectPos'].updateText(f"Selected Object Position: {window.objects[self.selectedObject].position()}")
+        else:
+            window.uiTexts['SelectedObjectPos'].updateText(f"Selected Object Position: N/A")
 
-        self.CurrObjectTitle = self.Titlefont.render(f'player', True, (255,255,255))
-        self.CurrObjectPos = self.Textfont.render(f"Position: {window.objects['player'].position()}", True, (255,255,255))
-
-        displayResX, displayResY = window.screenRes
-        self.editorWindow = pygame.Rect((0,0), (displayResX / 4, displayResY))
+        window.uiTexts['CameraPos'].updateText(f"Camera Position: ({window.camerax},{window.cameray})")
+        if window.play == False:
+            window.uiTexts['GameMode'].updateText(f"PAUSE")
+        else:
+            window.uiTexts['CameraPos'].updateText(f"")
 
         screenResX, screenResY = window.screenRes
-
+        displayResX, displayResY = window.displayRes
         screenFactorX = displayResX / screenResX 
         screenFactorY = displayResY / screenResY 
 
 
         mouseX = pygame.mouse.get_pos()[0] * screenFactorX
         mouseY = pygame.mouse.get_pos()[1] * screenFactorY
-        clippedX = round(mouseX/100, 1) * 100
-        clippedY = round(mouseY/100,1) * 100
+        clippedX = round(mouseX/8, 1) * 8
+        clippedY = round(mouseY/8,1) * 8
         camX, camY = window.cam_position()
-        pygame.draw.rect(window.screen, (0,0,0), pygame.Rect((clippedX, clippedY), (64,64)), width=2)
+        if window.play == False and check_key_pressed(pygame.K_LSHIFT):
+            pygame.draw.rect(window.display, (0,0,0), pygame.Rect((clippedX, clippedY), (8,8)), width=1)     
+            if window.left_clicking == True:
+                window.createObject(OBJECT('Bin/assets/images/ground.png', '','static', start_pos=(clippedX + camX, clippedY + camY)))
+            if window.right_clicking == True:     
+                for object in window.objects:
+                    curr_object = window.objects[object]
+                    if mouseX > curr_object.displayx and mouseX < curr_object.displayx + curr_object.width \
+                        and mouseY > curr_object.displayy and mouseY < curr_object.displayy + curr_object.height:
+                        window.objects.pop(object, None)
+                        break      
+        else:
+            if window.left_clicking == True:
+                for object in window.objects:
+                    curr_object = window.objects[object]
+                    if mouseX > curr_object.displayx and mouseX < curr_object.displayx + curr_object.width \
+                        and mouseY > curr_object.displayy and mouseY < curr_object.displayy + curr_object.height:
+                        self.selectedObject = object
+                        break
 
-        
-        if window.left_clicking == True:
-            window.createObject(OBJECT('Bin/assets/images/player_prototype.png', '','static', start_pos=(clippedX + camX, clippedY + camY)))
-        
-
-        pygame.draw.rect(window.screen, (0,0,0), self.editorWindow)
-        window.screen.blit(self.CurrObjectTitle ,(0,0))
-        window.screen.blit(self.CurrObjectPos, (20 , 60))
 
 
+
+class ANIMATOR():
+    pass
+
+
+class UITEXT():
+    def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20) -> None:
+        self.xpos, self.ypos = pos
+        self.name = name
+        self.color = color
+        self.font = pygame.font.Font(font_path, font_size)
+        self.text = self.font.render(f'', True, self.color) 
+
+
+    def updateText(self, new_text):
+        self.text = self.font.render(new_text, True,self.color)
+
+    def position(self):
+        return self.xpos, self.ypos
