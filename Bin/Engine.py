@@ -1,13 +1,29 @@
-from enum import Flag
 import pygame
 import sys
 import math
 
 
-
-
-
 #### BASIC FUNCTIONS
+# def read_file(path):
+#     file = open(path, 'r')
+#     lines  = []
+#     for line in file.readlines():
+#         lines.append(line)
+#     file.close()
+
+#     return lines
+
+# def write_file(path, text):
+#     # print(text)
+#     file = open(path, 'w')
+#     final = []
+#     for text_ in text:
+#         text_ += '\n'
+#         final.append(text_)
+#     file.writelines(final)
+
+#     file.close()
+
 def check_key_pressed(key):
     keys = pygame.key.get_pressed()
     if keys[key]:
@@ -18,7 +34,7 @@ def check_key_pressed(key):
 def encrypt_decrypt(text_to_encrypt, mode=0):
     # 0 is encrypt
     # 1 is decrypt
-    return_text = ''
+    return_text = []
 
     code = {
         'a': '1' ,
@@ -69,19 +85,26 @@ def encrypt_decrypt(text_to_encrypt, mode=0):
         '_': 'U' ,
         '-': 'M' ,
         '[': 'I',
-        ']': 'C'
+        ']': 'C',
+        '{': '&',
+        '}': '#',
+        '/': '}',
+        '\\': '{'
     }
      
 
 
-    if mode == 0:
-        for char in text_to_encrypt.lower():
-            return_text += code[char]
-    else:
-        for char in text_to_encrypt:
-            return_text += list(code.keys())[list(code.values()).index(char)]
+    for text in text_to_encrypt:
+        text_ = ''
+        if mode == 0:
+            for char in text.lower():
+                text_ += code[char]
+        else:
+            for char in text:
+                text_ += list(code.keys())[list(code.values()).index(char)]
+        return_text.append(text_)
 
-
+    # print(return_text)
     return return_text
 
 
@@ -92,14 +115,12 @@ class APPLICATION():
     
     pygame.init()
 
-    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps = False) -> None:
+    def __init__(self, screenRes,max_fps = 60, show_fps = False) -> None:
              ##WINDOW PARAMETERS AND VARIABLES
         self.screenRes = screenRes
-        self.displayRes = displayRes
         self.max_fps = max_fps
         self.show_fps = show_fps
         self.screen = pygame.display.set_mode(self.screenRes)
-        self.display = pygame.Surface(self.displayRes)
             ##GAMEPLAY VARIABLES
         self.objects =  {}
         self.running = True
@@ -146,14 +167,14 @@ class APPLICATION():
 
 
     def update(self):
-        self.display.fill((45, 175, 245))
-        camOffset = self.CameraMove()
+        self.screen.fill((45, 175, 245))
+        self.CameraMove()
         for object in self.objects:
             curr_object = self.objects[object]
             if curr_object.type != 'static' and self.is_editorMode == False:
                 curr_object.update(self.deltatime) # update the object
-            if self.is_inside_preview(curr_object) == True:
-                curr_object.draw(self.display, camOffset) # draw objects
+                curr_object.collider(self.objects)
+            self.renderObject(curr_object)
 
 
         if self.show_fps == True and self.is_editorMode == False:
@@ -164,23 +185,22 @@ class APPLICATION():
         
 
     def flip(self): # display the frame to the screen
-        surf = pygame.transform.scale(self.display, self.screenRes) # scale the display
-        self.screen.blit(surf, (0,0)) 
-        self.clock.tick(self.max_fps) #update the fps
+        self.clock.tick() #update the fps
         self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
-        pygame.display.flip() # show the screen to the player
+        pygame.display.update() # show the screen to the player
 
     def createObject(self, object):
         if object.name == '':
             object.name = 'object_' + str(len(self.objects))
         self.objects[object.name] = object # add new object to the list
+
         print(f"[CHECK] {object.name.upper()} initialized")
 
     def fps_counter(self, fps):
         if self.show_fps == True:
             font = pygame.font.Font("Bin/assets/fonts/Roboto_Regular.ttf", 32)
             text = font.render(f'fps: {fps} ', True,(255,255,255))
-            self.display.blit(text, (0,0))   #diplay fps on demand
+            self.screen.blit(text, (0,0))   #diplay fps on demand
 
     def activateCameraFollow(self,name):
         self.objToFollow = name # set the cmerafollow
@@ -199,17 +219,13 @@ class APPLICATION():
                 self.cameray += -self.cameraySpeed * self.deltatime
             elif check_key_pressed(pygame.K_s):
                 self.cameray += self.cameraySpeed * self.deltatime
-
-            return self.camerax, self.cameray
         else:
             if self.objToFollow != '':
                 object = self.objects[self.objToFollow]
-                width, height = self.displayRes
+                width, height = self.screenRes
                 self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX * self.deltatime
                 self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY * self.deltatime
-                return self.camerax, self.cameray
-            else:
-                return 0,0
+
 
     def cam_position(self):
         return self.camerax, self.cameray
@@ -220,18 +236,28 @@ class APPLICATION():
     def disabelEditorMode(self):
         self.is_editorMode = False
 
-    def is_inside_preview(self, object):
-        x,y = self.displayRes
-        if object.rect.x + object.width > 0 and object.rect.x < x \
-            and object.rect.y + object.height > 0 and object.rect.y < y:
+    def is_object_inside_preview(self, object):
+        x,y = self.screenRes
+        if object.displayx + object.width > 0 and object.displayx < x \
+            and object.displayy + object.height > 0 and object.displayy < y:
             return True
         else:
             return False
+
+    def renderObject(self, object):
+        object.displayx = object.rect.x - self.camerax
+        object.displayy = object.rect.y - self.cameray
+
+        if self.is_object_inside_preview(object) == True:
+            self.screen.blit(object.img, (object.displayx, object.displayy))
+
+
 
 
 class OBJECT():
     def __init__(self, img_path, name,type, start_pos=(0,0), function='') -> None:
         self.img = pygame.image.load(img_path)
+        self.img_path = img_path
         self.name = name
         self.width = self.img.get_width()
         self.height = self.img.get_height()
@@ -241,12 +267,11 @@ class OBJECT():
 
         self.displayx = 0
         self.displayy = 0
-    def draw(self,screen, camOffset):
-        xCamOffset, yCamOffset = camOffset
-        self.displayx = self.rect.x - xCamOffset 
-        self.displayy = self.rect.y - yCamOffset 
-        screen.blit(self.img, (self.displayx,self.displayy))
+        self.movement = [0,0]
+        self.hitlist = []
+        self.initialized_script = False
 
+  
     def move_by(self, x, y): # add a value to th existant position of the object
         self.rect.x += x
         self.rect.y += y
@@ -261,21 +286,61 @@ class OBJECT():
 
     def update(self, deltatime):
         if self.function != '':
-            self.function(self, deltatime)
+            return self.function(self, deltatime)
         else:
-           pass
+           return 
+    def collision_test(self, objects):
+        hitlist = []
+        for object in objects:
+            curr_object = objects[object]
+            if curr_object == self:
+                pass
+            else:
+                if self.rect.colliderect(curr_object.rect):
+                    hitlist.append(curr_object.rect)
+
+        return hitlist
+
+    def collider(self, others):
+        self.collision_types = {'Top': False, 'Bottom':False, 'Left':False, 'Right':False}
+        self.move_by(self.movement[0], 0)
+        hitlist = self.collision_test(others)
+        for other in hitlist:
+            if self.movement[0] > 0:
+                self.rect.right = other.left
+                self.collision_types['Right'] = True
+            elif self.movement[0] < 0:
+                self.rect.left = other.right
+                self.collision_types['Left'] = True
+        self.move_by(0, self.movement[1])
+        hitlist = self.collision_test(others)
+        for other in hitlist:
+            if self.movement[1] < 0:
+                self.rect.top = other.bottom
+                self.collision_types['Top'] = True
+            elif self.movement[1] > 0:
+                self.rect.bottom = other.top
+                self.collision_types['Bottom'] = True
+
+        self.movement = [0,0]
+
 
 
 
 class EDITOR():
+
     def __init__(self) -> None:
-        pass
+        self.Titlefont = pygame.font.Font('Bin/assets/fonts/Roboto_Regular.ttf', 32)
+        self.Textfont = pygame.font.Font('Bin/assets/fonts/Roboto_Regular.ttf', 24)
     def update(self, window):
         for object in window.objects:
             curr_object = window.objects[object]
-            pygame.draw.rect(window.display, (124,252,0), pygame.Rect((curr_object.displayx,curr_object.displayy), (curr_object.width,curr_object.height)), width=2)
+            pygame.draw.rect(window.screen, (124,252,0), pygame.Rect((curr_object.displayx,curr_object.displayy), (curr_object.width,curr_object.height)), width=2)
 
-        displayResX, displayResY = window.displayRes
+        self.CurrObjectTitle = self.Titlefont.render(f'player', True, (255,255,255))
+        self.CurrObjectPos = self.Textfont.render(f"Position: {window.objects['player'].position()}", True, (255,255,255))
+
+        displayResX, displayResY = window.screenRes
         self.editorWindow = pygame.Rect((0,0), (displayResX / 4, displayResY))
 
         screenResX, screenResY = window.screenRes
@@ -286,15 +351,18 @@ class EDITOR():
 
         mouseX = pygame.mouse.get_pos()[0] * screenFactorX
         mouseY = pygame.mouse.get_pos()[1] * screenFactorY
+        clippedX = round(mouseX/100, 1) * 100
+        clippedY = round(mouseY/100,1) * 100
         camX, camY = window.cam_position()
-        pygame.draw.rect(window.display, (0,0,0), pygame.Rect((mouseX, mouseY), (64,64)))
+        pygame.draw.rect(window.screen, (0,0,0), pygame.Rect((clippedX, clippedY), (64,64)), width=2)
 
         
         if window.left_clicking == True:
-            window.createObject(OBJECT('Bin/assets/images/player_prototype.png', '','static', start_pos=(mouseX + camX, mouseY + camY)))
+            window.createObject(OBJECT('Bin/assets/images/player_prototype.png', '','static', start_pos=(clippedX + camX, clippedY + camY)))
         
 
-        pygame.draw.rect(window.display, (0,0,0), self.editorWindow)
-
+        pygame.draw.rect(window.screen, (0,0,0), self.editorWindow)
+        window.screen.blit(self.CurrObjectTitle ,(0,0))
+        window.screen.blit(self.CurrObjectPos, (20 , 60))
 
 
