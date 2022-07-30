@@ -1,9 +1,7 @@
-from enum import Flag
-from tkinter import font
-from turtle import color
 import pygame
 import sys
 import math
+import inspect
 
 ## BASIC FUNCTIONS
 
@@ -64,7 +62,7 @@ def encrypt_decrypt(text_to_encrypt, mode=0):
         ',': 'X' ,
         ':': '?' ,
         '\'': 'N' ,
-        '"': 'D' ,
+        '"': 'R' ,
         '_': 'U' ,
         '-': 'M' ,
         '[': 'I',
@@ -72,10 +70,22 @@ def encrypt_decrypt(text_to_encrypt, mode=0):
         '{': '&',
         '}': '#',
         '/': '}',
-        '\\': '{'
+        '\\': '{',
+        '(' : '\'',
+        ')' : '(',
+        '<' : 'Y',
+        '>' : 'F'
     }
      
+    def get_key_by_value(value):
+        result = ''
+        for key in code:
+            curr_item = code[key]
+            if curr_item == value:
+               result = key
+               break
 
+        return result
 
     for text in text_to_encrypt:
         text_ = ''
@@ -84,20 +94,52 @@ def encrypt_decrypt(text_to_encrypt, mode=0):
                 text_ += code[char]
         else:
             for char in text:
-                text_ += list(code.keys())[list(code.values()).index(char)]
+                text_ += str(get_key_by_value(char))
         return_text.append(text_)
 
-    # print(return_text)
     return return_text
 
+def convert_to_text(objects):
+    text = []
+    for object in objects:
+        curr_object = objects[object]
+        function_info = ''
+        if curr_object.function != None:
+            function_info = curr_object.function.__name__
+        else:
+            function_info = 'None'
 
+        text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {curr_object.rect.x}, {curr_object.rect.y}, {function_info}, {curr_object.animated}, {curr_object.anim_path}')
 
+    return text
+
+def write_to_file(path, lines):
+    file = open(path, 'w')
+    final = ''
+
+    for line in lines:
+        final += line + '\n'
+
+    file.writelines(final)
+
+    file.close()
+
+def read_from_file(path):
+    file = open(path, 'r')
+    final = []
+
+    for line in file.readlines():
+        line.replace('\n', '')
+        final.append(line)
+
+    file.close()
+    return final
 
 class APPLICATION():
     
     pygame.init()
 
-    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, cam_Smooth=True, edit_mode=False, editor_width=500) -> None:
+    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, cam_Smooth=True, edit_mode=False, editor_width=400, editor_height=200, deltatime_used=False) -> None:
              ##WINDOW PARAMETERS AND VARIABLES
         self.screenRes = screenRes
         self.displayRes = displayRes
@@ -105,7 +147,7 @@ class APPLICATION():
         self.show_fps = show_fps
         self.screenX, self.screenY = self.screenRes
         if edit_mode == True:
-            self.screen = pygame.display.set_mode((self.screenX + editor_width, self.screenY))
+            self.screen = pygame.display.set_mode((self.screenX + editor_width, self.screenY + editor_height))
         else:
             self.screen = pygame.display.set_mode(self.screenRes)
         self.display = pygame.Surface(self.displayRes)
@@ -114,7 +156,8 @@ class APPLICATION():
         self.uiTexts = {}
         self.running = True
         self.clock = pygame.time.Clock()
-        self.deltatime = 0
+        self.deltatime = 1
+        self.deltatime_used = deltatime_used
             ##CAMERA VARIABLES
         self.camerax = 0
         self.cameray = 0
@@ -197,8 +240,9 @@ class APPLICATION():
             currUI = self.uiTexts[ui]
             self.screen.blit(currUI.text, currUI.position())
 
-        self.clock.tick() #update the fps
-        self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
+        self.clock.tick(self.max_fps) #update the fps
+        if self.deltatime_used == True:
+            self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
         pygame.display.update() # show the screen to the player
         
 
@@ -269,11 +313,37 @@ class APPLICATION():
         if self.is_object_inside_preview(object) == True:
             self.display.blit(object.img, (object.displayx, object.displayy))
 
+    def save_map(self, file_path):
+        try:
+            write_to_file(file_path,encrypt_decrypt(convert_to_text(self.objects)))
+            print('[CHECK] - Map successfully saved')
+        except Exception as e:     
+            print("\n\n\n[ERROR] - During map save event")
+            print(f'        {e}')
+
+    def load_map(self,file_path, functions):
+        try:
+            objects = encrypt_decrypt(read_from_file(file_path), 1)
+            self.objects.clear()
+            for object in objects:
+                parameter = object.replace(',', ' ').split()
+                function = None
+                for function_ in functions:
+                    if function_.__name__ == parameter[5]:
+                        function = function_
+                        break
+                self.createObject(OBJECT(parameter[0], parameter[1], parameter[2], (float(parameter[3]), float(parameter[4])), function, parameter[6], parameter[7]))
+            print('[CHECK] - Map successfully loaded')
+        except Exception as e:
+            print("\n\n\n[ERROR] - During map load event")
+            print(f'        {e}')
+
+
 
 
 
 class OBJECT():
-    def __init__(self, img_path, name,type, start_pos=(0,0), function='', animated=False, anim_path='') -> None:
+    def __init__(self, img_path, name,type, start_pos=(0,0), function=None, animated=False, anim_path=None) -> None:
         self.img = pygame.image.load(img_path)
         self.img_path = img_path
         self.name = name
@@ -288,7 +358,9 @@ class OBJECT():
         self.movement = [0,0]
         self.hitlist = []
         self.initialized_script = False
-        if animated == True:
+        self.animated = animated
+        self.anim_path = anim_path
+        if self.animated == True:
             self.animator = ANIMATOR()
 
   
@@ -302,10 +374,12 @@ class OBJECT():
 
     def position(self): # return the position of the player
         return self.rect.x, self.rect.y
+    def size(self):
+        return self.width, self.height
 
 
     def update(self, deltatime):
-        if self.function != '':
+        if self.function != None:
             return self.function(self, deltatime)
         else:
            return 
@@ -356,6 +430,7 @@ class EDITOR():
         window.createUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 100)))
         window.createUIElement(UITEXT(name='GameMode', font_size=50, pos=(window.screenX / 2 - 50, 10), color=(255,0,0)))
         self.selectedObject = ''
+        self.selectedImageToAdd = 'ground.png'
     def update(self, window):
         if self.selectedObject != '':
             window.uiTexts['SelectedObjectPos'].updateText(f"Selected Object Position: {window.objects[self.selectedObject].position()}")
@@ -366,7 +441,7 @@ class EDITOR():
         if window.play == False:
             window.uiTexts['GameMode'].updateText(f"PAUSE")
         else:
-            window.uiTexts['CameraPos'].updateText(f"")
+            window.uiTexts['GameMode'].updateText(f"")
 
         screenResX, screenResY = window.screenRes
         displayResX, displayResY = window.displayRes
@@ -380,9 +455,9 @@ class EDITOR():
         clippedY = round(mouseY/8,1) * 8
         camX, camY = window.cam_position()
         if window.play == False and check_key_pressed(pygame.K_LSHIFT):
-            pygame.draw.rect(window.display, (0,0,0), pygame.Rect((clippedX, clippedY), (8,8)), width=1)     
+            window.display.blit(pygame.image.load(f'Bin/assets/images/{self.selectedImageToAdd}'), (clippedX, clippedY))   
             if window.left_clicking == True:
-                window.createObject(OBJECT('Bin/assets/images/ground.png', '','static', start_pos=(clippedX + camX, clippedY + camY)))
+                window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', '','static', start_pos=(clippedX + camX, clippedY + camY)))
             if window.right_clicking == True:     
                 for object in window.objects:
                     curr_object = window.objects[object]

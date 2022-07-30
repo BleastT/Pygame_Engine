@@ -1,28 +1,28 @@
 import Bin.Engine as Engine
 
-def MAIN(body, deltatime):
+def player(body, deltatime):
 
     def start():
-        body.xspeed = 1
+        body.xspeed = 3
         body.yvelocity = 0
-        body.gravity = 10
+        body.gravity = 1
         body.movement = [0,0]
         body.jumping = False
-        body.jumpForce = 1
+        body.jumpForce = 8
 
 
     def update():
         if Engine.check_key_pressed(Engine.pygame.K_a):
-            body.movement[0] = -body.xspeed
+            body.movement[0] = -body.xspeed * deltatime
         elif Engine.check_key_pressed(Engine.pygame.K_d):
-            body.movement[0] = body.xspeed
+            body.movement[0] = body.xspeed * deltatime
 
 
         if Engine.check_key_pressed(Engine.pygame.K_SPACE) and body.jumping == False:
-            body.yvelocity = -body.jumpForce
+            body.yvelocity = -body.jumpForce 
             body.jumping = True
         else:
-            body.yvelocity += body.gravity * deltatime
+            body.yvelocity += body.gravity
             
 
         if body.collision_types['Bottom'] == True:
@@ -31,7 +31,7 @@ def MAIN(body, deltatime):
         elif body.collision_types['Top'] == True:
             body.yvelocity = True
 
-        body.movement[1] = body.yvelocity
+        body.movement[1] = body.yvelocity * deltatime
 
     
     if body.initialized_script == False:
