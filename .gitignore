@@ -1,2 +1,6 @@
 env
 __pycache__
+.gitignore
+.git
+__pycache__
+Bin/__pycache__
