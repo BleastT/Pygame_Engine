@@ -1,7 +1,6 @@
 import pygame
 import sys
 import math
-import inspect
 
 ## BASIC FUNCTIONS
 
@@ -108,8 +107,8 @@ def convert_to_text(objects):
             function_info = curr_object.function.__name__
         else:
             function_info = 'None'
-
-        text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {curr_object.rect.x}, {curr_object.rect.y}, {function_info}, {curr_object.animated}, {curr_object.anim_path}')
+        x,y = curr_object.start_pos
+        text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {x}, {y}, {function_info}, {curr_object.animated}, {curr_object.anim_path}')
 
     return text
 
@@ -139,7 +138,7 @@ class APPLICATION():
     
     pygame.init()
 
-    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, cam_Smooth=True, edit_mode=False, editor_width=400, editor_height=200, deltatime_used=False) -> None:
+    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, cam_Smooth=True, edit_mode=False, editor_width=400, editor_height=100, deltatime_used=False, window_name='pygame window') -> None:
              ##WINDOW PARAMETERS AND VARIABLES
         self.screenRes = screenRes
         self.displayRes = displayRes
@@ -151,9 +150,12 @@ class APPLICATION():
         else:
             self.screen = pygame.display.set_mode(self.screenRes)
         self.display = pygame.Surface(self.displayRes)
+        pygame.display.set_caption(window_name)
             ##GAMEPLAY VARIABLES
         self.objects =  {}
-        self.uiTexts = {}
+        self.uiElements = {}
+        self.functions = []
+        self.editoruiElements = {}
         self.running = True
         self.clock = pygame.time.Clock()
         self.deltatime = 1
@@ -182,11 +184,15 @@ class APPLICATION():
 
 
         if self.show_fps == True:
-            self.createUIElement(UITEXT(name='FPS'))
-        print('[CHECK] WINDOW initialized')
+            self.createUIElement(UITEXT(name='FPS', font_size=9))
+        print(f'{bcolors.OKGREEN}[CHECK] WINDOW initialized{bcolors.ENDC}')
 
     def get(self, name):
         return self.objects[name]
+
+    def load_functions(self, functions):
+        for function in functions:
+            self.functions.append(function)
 
     def Poll_Events(self):
         self.left_clicking = False
@@ -226,18 +232,25 @@ class APPLICATION():
 
 
         if self.show_fps == True and self.play == True:
-            self.uiTexts['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
+            self.uiElements['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
 
         if self.is_editorMode == True:
             self.Editor.update(self)
 
-
+        ###ADD Game UI ELEMENTS
+        for ui in self.uiElements:
+            currUI = self.uiElements[ui]
+            self.display.blit(currUI.text, currUI.position())
         surf = pygame.transform.scale(self.display, self.screenRes)
         self.screen.blit(surf, (0,0))
 
-        ###ADD UI ELEMENTS
-        for ui in self.uiTexts:
-            currUI = self.uiTexts[ui]
+
+        ###ADD Editor UI ELEMENTS
+        for editorui in self.editoruiElements:
+            currUI = self.editoruiElements[editorui]
+            if type(currUI) == UIBUTTON:
+                currUI.check_click(self)
+                pygame.draw.rect(self.screen, (255,0,200), pygame.Rect(currUI.position(), (currUI.button_width, currUI.button_height)))
             self.screen.blit(currUI.text, currUI.position())
 
         self.clock.tick(self.max_fps) #update the fps
@@ -248,17 +261,28 @@ class APPLICATION():
 
     def createObject(self, object):
         if object.name == '':
-            object.name = 'object_' + str(len(self.objects))
+            object.name = 'object_' + str(object.rect.x) + str(object.rect.y)
+
+        if object.function != None:
+            for function in self.functions:
+                if object.function == function.__name__:
+                    object.function = function
+        
         self.objects[object.name] = object # add new object to the list
 
-        print(f"[CHECK] {object.name.upper()} initialized")
+
+        print(f"{bcolors.OKGREEN}[CHECK] {object.name.upper()} initialized{bcolors.ENDC}")
 
     def createUIElement(self, ui):
         if ui.name == '':
-            ui.name = 'uiElement_' + str(len(self.objects))
-        self.uiTexts[ui.name] = ui
+            ui.name = 'uiElement_' + str(ui.xpos) + str(ui.ypos)
+        self.uiElements[ui.name] = ui
 
-        print(f"[CHECK] {ui.name.upper()} initialized")
+        print(f"{bcolors.OKGREEN}[CHECK] {ui.name.upper()} initialized{bcolors.ENDC}")
+    def createEditorUIElement(self, ui):
+        if ui.name == '':
+            ui.name = 'editoruiElement_' + str(ui.xpos) + str(ui.ypos)
+        self.editoruiElements[ui.name] = ui
 
     def activateCameraFollow(self,name):
         self.objToFollow = name # set the cmerafollow
@@ -284,7 +308,7 @@ class APPLICATION():
                 if self.smooth == True:
                     self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX * self.deltatime
                     self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY * self.deltatime
-                else:
+                else: 
                     self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2)
                     self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2)
 
@@ -316,26 +340,21 @@ class APPLICATION():
     def save_map(self, file_path):
         try:
             write_to_file(file_path,encrypt_decrypt(convert_to_text(self.objects)))
-            print('[CHECK] - Map successfully saved')
+            print(f'{bcolors.OKGREEN}[CHECK] - Map successfully saved{bcolors.ENDC}')
         except Exception as e:     
-            print("\n\n\n[ERROR] - During map save event")
-            print(f'        {e}')
+            print(f"{bcolors.FAIL}\n\n\n[ERROR] - During map save event{bcolors.ENDC}")
+            print(f'{bcolors.FAIL}        {e}{bcolors.ENDC}')
 
-    def load_map(self,file_path, functions):
+    def load_map(self,file_path):
         try:
             objects = encrypt_decrypt(read_from_file(file_path), 1)
             self.objects.clear()
             for object in objects:
                 parameter = object.replace(',', ' ').split()
-                function = None
-                for function_ in functions:
-                    if function_.__name__ == parameter[5]:
-                        function = function_
-                        break
-                self.createObject(OBJECT(parameter[0], parameter[1], parameter[2], (float(parameter[3]), float(parameter[4])), function, parameter[6], parameter[7]))
-            print('[CHECK] - Map successfully loaded')
+                self.createObject(OBJECT(parameter[0], parameter[1], parameter[2], (float(parameter[3]), float(parameter[4])), parameter[5], parameter[6], parameter[7]))
+            print(f'{bcolors.OKGREEN}[CHECK] - Map successfully loaded{bcolors.ENDC}')
         except Exception as e:
-            print("\n\n\n[ERROR] - During map load event")
+            print(f"{bcolors.FAIL}\n\n\n[ERROR] - During map load event{bcolors.ENDC}")
             print(f'        {e}')
 
 
@@ -350,6 +369,7 @@ class OBJECT():
         self.width = self.img.get_width()
         self.height = self.img.get_height()
         self.rect = pygame.Rect(start_pos, (self.width, self.height))
+        self.start_pos = start_pos
         self.type = type
         self.function = function
 
@@ -424,24 +444,57 @@ class OBJECT():
 class EDITOR():
 
     def __init__(self,window) -> None:
-        window.createUIElement(UITEXT(name='Titlefont', font_size=32, pos=(window.screenX, 0)))
-        window.uiTexts['Titlefont'].updateText('Game Informations')
-        window.createUIElement(UITEXT(name='SelectedObjectPos', font_size=24, pos=(window.screenX + 20, 60)))
-        window.createUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 100)))
-        window.createUIElement(UITEXT(name='GameMode', font_size=50, pos=(window.screenX / 2 - 50, 10), color=(255,0,0)))
+        window.createEditorUIElement(UITEXT(name='Titlefont', font_size=32, pos=(window.screenX, 0)))
+        window.createEditorUIElement(UITEXT(name='SelectedObjectPos', font_size=24, pos=(window.screenX + 20, 60)))
+        window.createEditorUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 100)))
+        window.createEditorUIElement(UITEXT(name='GameMode', font_size=50, pos=(window.screenX / 2 - 50, 10), color=(255,0,0)))
+        window.createEditorUIElement(UITEXT(name='Object type', font_size=20, pos=(window.screenX + 20, 150)))
+        window.createEditorUIElement(UITEXT(name='Object function', font_size=20, pos=(window.screenX + 20, 200)))
+        window.createEditorUIElement(UITEXT(name='Object name', font_size=20, pos=(window.screenX + 20, 250)))
+
+
+        window.createEditorUIElement(UIBUTTON(name='Save_MAP', font_size=20 , pos=(window.screenX +20, 300)))
+        window.createEditorUIElement(UIBUTTON(name='Load_MAP', font_size=20 , pos=(window.screenX +20, 350)))
+        window.createEditorUIElement(UIBUTTON(name='Bind_Function', font_size=20 , pos=(window.screenX +20, 400), button_width=130))
+        window.createEditorUIElement(UIBUTTON(name='Remove_Function', font_size=20 , pos=(window.screenX +160, 400), button_width=160))
+        window.createEditorUIElement(UIBUTTON(name='Static', font_size=20 , pos=(window.screenX +20, 450)))
+        window.createEditorUIElement(UIBUTTON(name='Fluid', font_size=20 , pos=(window.screenX +140, 450)))
+        window.createEditorUIElement(UIBUTTON(name='Add_Name', font_size=20 , pos=(window.screenX +20, 500)))
+        window.createEditorUIElement(UIBUTTON(name='Remove_Name', font_size=20 , pos=(window.screenX +140, 500), button_width=140))
+
+        window.editoruiElements['Save_MAP'].updateText('Save Map')
+        window.editoruiElements['Load_MAP'].updateText('Load Map')
+        window.editoruiElements['Bind_Function'].updateText('Bind Function')
+        window.editoruiElements['Remove_Function'].updateText('Remove Function')
+        window.editoruiElements['Static'].updateText('Static')
+        window.editoruiElements['Fluid'].updateText('Fluid')
+        window.editoruiElements['Titlefont'].updateText('Game Informations')
+        window.editoruiElements['Add_Name'].updateText('Add Name')
+        window.editoruiElements['Remove_Name'].updateText('Remove Name')
+
         self.selectedObject = ''
         self.selectedImageToAdd = 'ground.png'
-    def update(self, window):
-        if self.selectedObject != '':
-            window.uiTexts['SelectedObjectPos'].updateText(f"Selected Object Position: {window.objects[self.selectedObject].position()}")
-        else:
-            window.uiTexts['SelectedObjectPos'].updateText(f"Selected Object Position: N/A")
+        self.img = pygame.image.load(f'Bin/assets/images/{self.selectedImageToAdd}')
 
-        window.uiTexts['CameraPos'].updateText(f"Camera Position: ({window.camerax},{window.cameray})")
-        if window.play == False:
-            window.uiTexts['GameMode'].updateText(f"PAUSE")
+        ## create Object parameters
+        self.objectType = 'static'
+        self.objectFunction = None
+        self.objectName = ''
+    def update(self, window):
+        window.editoruiElements['Object type'].updateText(f'Object type: {self.objectType}')
+        window.editoruiElements['Object function'].updateText(f'Object function: {self.objectFunction}')
+        window.editoruiElements['Object name'].updateText(f'Object name: {self.objectName}')
+
+        if self.selectedObject != '':
+            window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: {window.objects[self.selectedObject].position()}")
         else:
-            window.uiTexts['GameMode'].updateText(f"")
+            window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: N/A")
+
+        window.editoruiElements['CameraPos'].updateText(f"Camera Position: ({window.camerax},{window.cameray})")
+        if window.play == False:
+            window.editoruiElements['GameMode'].updateText(f"PAUSE")
+        else:
+            window.editoruiElements['GameMode'].updateText(f"")
 
         screenResX, screenResY = window.screenRes
         displayResX, displayResY = window.displayRes
@@ -451,37 +504,81 @@ class EDITOR():
 
         mouseX = pygame.mouse.get_pos()[0] * screenFactorX
         mouseY = pygame.mouse.get_pos()[1] * screenFactorY
-        clippedX = round(mouseX/8, 1) * 8
-        clippedY = round(mouseY/8,1) * 8
+        clippedX = math.ceil(round(mouseX/10, 1) * 10)
+        clippedY = math.ceil(round(mouseY/10,1) * 10)
         camX, camY = window.cam_position()
+
+        objectPreviewRect = pygame.Rect((clippedX - self.img.get_height() / 2, clippedY - self.img.get_height() / 2), (self.img.get_width(), self.img.get_height()))
         if window.play == False and check_key_pressed(pygame.K_LSHIFT):
-            window.display.blit(pygame.image.load(f'Bin/assets/images/{self.selectedImageToAdd}'), (clippedX, clippedY))   
+            # window.display.blit(self.img, (clippedX - self.img.get_height() / 2, clippedY - self.img.get_height() / 2))  
+            pygame.draw.rect(window.display, (0,0,0), objectPreviewRect, 1) 
             if window.left_clicking == True:
-                window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', '','static', start_pos=(clippedX + camX, clippedY + camY)))
-            if window.right_clicking == True:     
+                if len(window.objects) == 0:
+                    window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction))
+                else:
+                    for object in window.objects:
+                        curr_object = window.objects[object]
+                        if  self.check_mouse_inside(mouseX, mouseY, curr_object) == False:
+                            window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName ,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction))
+                            break
+            elif window.right_clicking == True:
                 for object in window.objects:
                     curr_object = window.objects[object]
-                    if mouseX > curr_object.displayx and mouseX < curr_object.displayx + curr_object.width \
-                        and mouseY > curr_object.displayy and mouseY < curr_object.displayy + curr_object.height:
+                    if self.check_mouse_inside(mouseX, mouseY, curr_object):
                         window.objects.pop(object, None)
                         break      
         else:
             if window.left_clicking == True:
                 for object in window.objects:
                     curr_object = window.objects[object]
-                    if mouseX > curr_object.displayx and mouseX < curr_object.displayx + curr_object.width \
-                        and mouseY > curr_object.displayy and mouseY < curr_object.displayy + curr_object.height:
+                    if self.check_mouse_inside(mouseX, mouseY, curr_object):
                         self.selectedObject = object
                         break
 
+        self.check_editor_buttons(window)
 
+    def check_mouse_inside(self, mouseX, mouseY, object):
+        if mouseX > object.displayx and mouseX < object.displayx + object.width \
+            and mouseY > object.displayy and mouseY < object.displayy + object.height:
+            return True
+        else:
+            return False
+
+
+    def check_editor_buttons(self, window):
+        for buttonNBR in window.editoruiElements:
+            button = window.editoruiElements[buttonNBR]
+            if type(button) == UIBUTTON:
+                if button.check_click(window):          
+                    if button.name == 'Save_MAP':
+                        file = input(f'{bcolors.HEADER}Save file name: {bcolors.ENDC}')
+                        window.save_map(f'Bin/assets/data/{file}')
+                    elif button.name == 'Load_MAP':
+                        file = input(f'{bcolors.HEADER}Load file name: {bcolors.ENDC}')
+                        window.load_map(f'Bin/assets/data/{file}')
+                    elif button.name == 'Bind_Function':
+                        function = input(f'{bcolors.HEADER}Function name: {bcolors.ENDC}')
+                        self.objectFunction = function
+                    elif button.name == 'Remove_Function':
+                        self.objectFunction = None
+                    elif button.name == 'Static':
+                        self.objectType = 'static'
+                    elif button.name == 'Fluid':
+                        self.objectType = 'fluid'
+                    elif button.name == 'Add_Name':
+                        name = input(f"{bcolors.HEADER}Object's name: {bcolors.ENDC}")
+                        self.objectName = name
+                    elif button.name == 'Remove_Name':
+                        self.objectName = ''
+
+
+        
 
 
 class ANIMATOR():
     pass
 
-
-class UITEXT():
+class UI:
     def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20) -> None:
         self.xpos, self.ypos = pos
         self.name = name
@@ -489,9 +586,42 @@ class UITEXT():
         self.font = pygame.font.Font(font_path, font_size)
         self.text = self.font.render(f'', True, self.color) 
 
-
     def updateText(self, new_text):
         self.text = self.font.render(new_text, True,self.color)
 
     def position(self):
         return self.xpos, self.ypos
+
+class UITEXT(UI):
+    def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20) -> None:
+        super().__init__(name, color, font_path, pos, font_size)
+
+
+class UIBUTTON(UI):
+    def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20, button_width=100, button_heigth=30) -> None:
+        super().__init__(name, color, font_path, pos, font_size)
+        self.x, self.y  = pos
+        self.button_width = button_width
+        self.button_height = button_heigth
+
+    def check_click(self, window):
+        if window.left_clicking == True:
+            mouseX, mouseY = pygame.mouse.get_pos()
+            if mouseX > self.x and mouseX < self.x + self.button_width \
+                and mouseY > self.y and mouseY < self.y + self.button_height:
+                return True
+            else:
+                return False
+
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
