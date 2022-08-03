@@ -1,6 +1,7 @@
 import pygame
 import sys
 import math
+import os
 
 ## BASIC FUNCTIONS
 
@@ -103,12 +104,12 @@ def convert_to_text(objects):
     for object in objects:
         curr_object = objects[object]
         function_info = ''
-        if curr_object.function != None:
+        if curr_object.function != None and curr_object.function != 'none':
             function_info = curr_object.function.__name__
         else:
             function_info = 'None'
         x,y = curr_object.start_pos
-        text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {x}, {y}, {function_info}, {curr_object.animated}, {curr_object.anim_path}')
+        text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {x}, {y}, {curr_object.width}, {curr_object.height}, {function_info}, {curr_object.animated}, {curr_object.anim_path}')
 
     return text
 
@@ -167,9 +168,13 @@ class APPLICATION():
         self.camDelayY = 1
         self.cameraxSpeed = 1
         self.cameraySpeed = 1
+        self.follow_axis = (True, True)
+        self.yView = 'center'
+        self.xView = 'center'
         self.camBeforeEditMode = (0,0)
         self.objToFollow = ''
         self.smooth = cam_Smooth
+        self.loaded_map = ''
 
           ##Editor mode
         self.Editor = EDITOR(self)
@@ -212,6 +217,10 @@ class APPLICATION():
                         else:
                             self.play = True
                             self.camerax, self.cameray = self.camBeforeEditMode
+                    elif event.key == pygame.K_F11 and self.loaded_map != '':
+                        self.play = False
+                        self.load_map(f'Bin/assets/data/{self.loaded_map}')
+                        self.camerax, self.cameray = (0,0)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                    self.left_clicking = True
@@ -220,43 +229,52 @@ class APPLICATION():
 
 
     def update(self):
-        self.display.fill((45, 175, 245))
-        self.screen.fill((0,0,0))
-        self.CameraMove()
-        for object in self.objects:
-            curr_object = self.objects[object]
-            if curr_object.type != 'static' and self.play == True:
-                curr_object.update(self.deltatime) # update the object
-                curr_object.collider(self.objects)
-            self.renderObject(curr_object)
+        try:
+            self.display.fill((45, 175, 245))
+            self.screen.fill((0,0,0))
+            self.CameraMove()
+            if self.deltatime_used == True:
+                delta = self.deltatime
+            else:
+                delta = 1
+            for object in self.objects:
+                curr_object = self.objects[object]
+                if curr_object.type != 'static' and self.play == True:
+                    curr_object.update(delta, self) # update the object
+                    curr_object.collider(self.objects)
+                self.renderObject(curr_object)
 
 
-        if self.show_fps == True and self.play == True:
-            self.uiElements['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
+            if self.show_fps == True and self.play == True:
+                self.uiElements['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
 
-        if self.is_editorMode == True:
-            self.Editor.update(self)
+            if self.is_editorMode == True:
+                self.Editor.update(self)
 
-        ###ADD Game UI ELEMENTS
-        for ui in self.uiElements:
-            currUI = self.uiElements[ui]
-            self.display.blit(currUI.text, currUI.position())
-        surf = pygame.transform.scale(self.display, self.screenRes)
-        self.screen.blit(surf, (0,0))
+            ###ADD Game UI ELEMENTS
+            for ui in self.uiElements:
+                currUI = self.uiElements[ui]
+                self.display.blit(currUI.text, currUI.position())
+            surf = pygame.transform.scale(self.display, self.screenRes)
+            self.screen.blit(surf, (0,0))
 
 
-        ###ADD Editor UI ELEMENTS
-        for editorui in self.editoruiElements:
-            currUI = self.editoruiElements[editorui]
-            if type(currUI) == UIBUTTON:
-                currUI.check_click(self)
-                pygame.draw.rect(self.screen, (255,0,200), pygame.Rect(currUI.position(), (currUI.button_width, currUI.button_height)))
-            self.screen.blit(currUI.text, currUI.position())
+            ###ADD Editor UI ELEMENTS
+            for editorui in self.editoruiElements:
+                currUI = self.editoruiElements[editorui]
+                if type(currUI) == UIBUTTON:
+                    currUI.check_click(self)
+                    pygame.draw.rect(self.screen, (255,0,200), pygame.Rect(currUI.position(), (currUI.button_width, currUI.button_height)))
+                self.screen.blit(currUI.text, currUI.position())
 
-        self.clock.tick(self.max_fps) #update the fps
-        if self.deltatime_used == True:
+            self.clock.tick(self.max_fps) #update the fps
             self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
-        pygame.display.update() # show the screen to the player
+            pygame.display.update() # show the screen to the player
+        except Exception as e:
+            print(f"{bcolors.FAIL}\n\n\n[ERROR] - During Game loop{bcolors.ENDC}")
+            print(f'        {e}')
+
+
         
 
     def createObject(self, object):
@@ -267,6 +285,7 @@ class APPLICATION():
             for function in self.functions:
                 if object.function == function.__name__:
                     object.function = function
+                    break
         
         self.objects[object.name] = object # add new object to the list
 
@@ -284,9 +303,11 @@ class APPLICATION():
             ui.name = 'editoruiElement_' + str(ui.xpos) + str(ui.ypos)
         self.editoruiElements[ui.name] = ui
 
-    def activateCameraFollow(self,name):
+    def activateCameraFollow(self,name, follow_axis=(True, True), yView='center', xView='center'):
         self.objToFollow = name # set the cmerafollow
-
+        self.follow_axis = follow_axis
+        self.yView = yView
+        self.xView = xView
     def deactivateCameraFollow(self):
         self.objToFollow = ''
 
@@ -305,12 +326,38 @@ class APPLICATION():
             if self.objToFollow != '':
                 object = self.objects[self.objToFollow]
                 width, height = self.displayRes
+                x,y = self.follow_axis
                 if self.smooth == True:
-                    self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX * self.deltatime
-                    self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY * self.deltatime
+                    if x == True:
+                        if self.xView == 'center':
+                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX * self.deltatime
+                        if self.xView == 'right':
+                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 + (width / 4)) * self.camDelayX * self.deltatime
+                        if self.xView == 'left':
+                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 - (width / 4)) * self.camDelayX * self.deltatime
+                        
+                    if y == True:
+                        if self.yView == 'center':
+                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY * self.deltatime
+                        elif self.yView == 'top':
+                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  - (height / 4)) * self.camDelayY * self.deltatime
+                        elif self.yView == 'bottom':
+                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  + (height / 4)) * self.camDelayY * self.deltatime
                 else: 
-                    self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2)
-                    self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2)
+                    if x == True:
+                        if self.xView == 'center':
+                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2)
+                        if self.xView == 'right':
+                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 + (width / 4)) 
+                        if self.xView == 'left':
+                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 - (width / 4)) 
+                    if y == True:
+                        if self.yView == 'center':
+                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2)
+                        elif self.yView == 'top':
+                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  - (height / 4))
+                        elif self.yView == 'bottom':
+                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  + (height / 4))
 
 
     def cam_position(self):
@@ -351,19 +398,17 @@ class APPLICATION():
             self.objects.clear()
             for object in objects:
                 parameter = object.replace(',', ' ').split()
-                self.createObject(OBJECT(parameter[0], parameter[1], parameter[2], (float(parameter[3]), float(parameter[4])), parameter[5], parameter[6], parameter[7]))
+                self.createObject(OBJECT(parameter[0], parameter[1], parameter[2], (float(parameter[3]), float(parameter[4])), (float(parameter[5]), float(parameter[6])), parameter[7], parameter[8], parameter[9]))
             print(f'{bcolors.OKGREEN}[CHECK] - Map successfully loaded{bcolors.ENDC}')
         except Exception as e:
             print(f"{bcolors.FAIL}\n\n\n[ERROR] - During map load event{bcolors.ENDC}")
             print(f'        {e}')
 
-
-
-
-
 class OBJECT():
-    def __init__(self, img_path, name,type, start_pos=(0,0), function=None, animated=False, anim_path=None) -> None:
+    def __init__(self, img_path, name,type, start_pos=(0,0), size=(0,0), function=None, animated=False, anim_path=None) -> None:
         self.img = pygame.image.load(img_path)
+        if size != (0,0):
+            self.image = pygame.transform.scale(self.img, size)
         self.img_path = img_path
         self.name = name
         self.width = self.img.get_width()
@@ -382,6 +427,8 @@ class OBJECT():
         self.anim_path = anim_path
         if self.animated == True:
             self.animator = ANIMATOR()
+        
+        self.appRef = None
 
   
     def move_by(self, x, y): # add a value to th existant position of the object
@@ -398,7 +445,8 @@ class OBJECT():
         return self.width, self.height
 
 
-    def update(self, deltatime):
+    def update(self, deltatime, app):
+        self.appRef = app
         if self.function != None:
             return self.function(self, deltatime)
         else:
@@ -446,21 +494,26 @@ class EDITOR():
     def __init__(self,window) -> None:
         window.createEditorUIElement(UITEXT(name='Titlefont', font_size=32, pos=(window.screenX, 0)))
         window.createEditorUIElement(UITEXT(name='SelectedObjectPos', font_size=24, pos=(window.screenX + 20, 60)))
-        window.createEditorUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 100)))
+        window.createEditorUIElement(UITEXT(name='SelectedObjectName', font_size=24, pos=(window.screenX + 20, 120)))
+        window.createEditorUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 160)))
         window.createEditorUIElement(UITEXT(name='GameMode', font_size=50, pos=(window.screenX / 2 - 50, 10), color=(255,0,0)))
-        window.createEditorUIElement(UITEXT(name='Object type', font_size=20, pos=(window.screenX + 20, 150)))
-        window.createEditorUIElement(UITEXT(name='Object function', font_size=20, pos=(window.screenX + 20, 200)))
-        window.createEditorUIElement(UITEXT(name='Object name', font_size=20, pos=(window.screenX + 20, 250)))
+        window.createEditorUIElement(UITEXT(name='Object type', font_size=20, pos=(window.screenX + 20, 210)))
+        window.createEditorUIElement(UITEXT(name='Object function', font_size=20, pos=(window.screenX + 20, 260)))
+        window.createEditorUIElement(UITEXT(name='Object name', font_size=20, pos=(window.screenX + 20, 310)))
+        window.createEditorUIElement(UITEXT(name='Object image', font_size=20, pos=(window.screenX + 20, 360)))
 
 
-        window.createEditorUIElement(UIBUTTON(name='Save_MAP', font_size=20 , pos=(window.screenX +20, 300)))
-        window.createEditorUIElement(UIBUTTON(name='Load_MAP', font_size=20 , pos=(window.screenX +20, 350)))
-        window.createEditorUIElement(UIBUTTON(name='Bind_Function', font_size=20 , pos=(window.screenX +20, 400), button_width=130))
-        window.createEditorUIElement(UIBUTTON(name='Remove_Function', font_size=20 , pos=(window.screenX +160, 400), button_width=160))
-        window.createEditorUIElement(UIBUTTON(name='Static', font_size=20 , pos=(window.screenX +20, 450)))
-        window.createEditorUIElement(UIBUTTON(name='Fluid', font_size=20 , pos=(window.screenX +140, 450)))
-        window.createEditorUIElement(UIBUTTON(name='Add_Name', font_size=20 , pos=(window.screenX +20, 500)))
-        window.createEditorUIElement(UIBUTTON(name='Remove_Name', font_size=20 , pos=(window.screenX +140, 500), button_width=140))
+        window.createEditorUIElement(UIBUTTON(name='Save_MAP', font_size=20 , pos=(window.screenX +20, 410)))
+        window.createEditorUIElement(UIBUTTON(name='Load_MAP', font_size=20 , pos=(window.screenX +20, 460)))
+        window.createEditorUIElement(UIBUTTON(name='Bind_Function', font_size=20 , pos=(window.screenX +20, 510), button_width=130))
+        window.createEditorUIElement(UIBUTTON(name='Remove_Function', font_size=20 , pos=(window.screenX +160, 510), button_width=160))
+        window.createEditorUIElement(UIBUTTON(name='Static', font_size=20 , pos=(window.screenX +20, 560)))
+        window.createEditorUIElement(UIBUTTON(name='Fluid', font_size=20 , pos=(window.screenX +140, 560)))
+        window.createEditorUIElement(UIBUTTON(name='Add_Name', font_size=20 , pos=(window.screenX +20, 610)))
+        window.createEditorUIElement(UIBUTTON(name='Remove_Name', font_size=20 , pos=(window.screenX +140, 610), button_width=140))
+        window.createEditorUIElement(UIBUTTON(name='Modify_Object', font_size=20 , pos=(window.screenX +20, 660), button_width=130))
+        window.createEditorUIElement(UIBUTTON(name='Images_Left', font_size=20 , pos=(10, window.screenY + 20)))
+        window.createEditorUIElement(UIBUTTON(name='Images_Right', font_size=20 , pos=(600, window.screenY + 20)))
 
         window.editoruiElements['Save_MAP'].updateText('Save Map')
         window.editoruiElements['Load_MAP'].updateText('Load Map')
@@ -471,24 +524,52 @@ class EDITOR():
         window.editoruiElements['Titlefont'].updateText('Game Informations')
         window.editoruiElements['Add_Name'].updateText('Add Name')
         window.editoruiElements['Remove_Name'].updateText('Remove Name')
+        window.editoruiElements['Modify_Object'].updateText('Modify Object')
+        window.editoruiElements['Images_Left'].updateText('Left')
+        window.editoruiElements['Images_Right'].updateText('Right')
+
+            
+        self.images = []
+        self.currImageList = 0
+        
+        images_names = os.listdir('Bin/assets/images')
+        images_array = []
+        image_int = 1
+        for image in images_names:
+            if image_int > 6:
+                self.images.append(images_array)
+                images_array = []
+                image_int = 0
+
+            images_array.append(image)
+            image_int += 1
+
+        self.images.append(images_array)
+
 
         self.selectedObject = ''
-        self.selectedImageToAdd = 'ground.png'
+        self.selectedImageToAdd = self.images[self.currImageList][0]
         self.img = pygame.image.load(f'Bin/assets/images/{self.selectedImageToAdd}')
+        window.editoruiElements['Object image'].updateText(f'Object image: {self.selectedImageToAdd}')
 
         ## create Object parameters
         self.objectType = 'static'
         self.objectFunction = None
         self.objectName = ''
+        self.loaded_MAP = ''
     def update(self, window):
+
+
         window.editoruiElements['Object type'].updateText(f'Object type: {self.objectType}')
         window.editoruiElements['Object function'].updateText(f'Object function: {self.objectFunction}')
         window.editoruiElements['Object name'].updateText(f'Object name: {self.objectName}')
 
         if self.selectedObject != '':
-            window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: {window.objects[self.selectedObject].position()}")
+            window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: {window.get(self.selectedObject).position()}")
+            window.editoruiElements['SelectedObjectName'].updateText(f"Selected Object Name: {self.selectedObject}")
         else:
             window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: N/A")
+            window.editoruiElements['SelectedObjectName'].updateText(f"Selected Object Name: N/A")
 
         window.editoruiElements['CameraPos'].updateText(f"Camera Position: ({window.camerax},{window.cameray})")
         if window.play == False:
@@ -526,6 +607,7 @@ class EDITOR():
                     curr_object = window.objects[object]
                     if self.check_mouse_inside(mouseX, mouseY, curr_object):
                         window.objects.pop(object, None)
+                        self.selectedObject = ''
                         break      
         else:
             if window.left_clicking == True:
@@ -534,6 +616,22 @@ class EDITOR():
                     if self.check_mouse_inside(mouseX, mouseY, curr_object):
                         self.selectedObject = object
                         break
+
+        ## draw tiles images preview
+        mX, my = pygame.mouse.get_pos()
+        xOffset = 100
+        for image in self.images[self.currImageList]:
+            image_ = pygame.image.load(f'Bin/assets/images/{image}')
+            image_ = pygame.transform.scale(image_, (64,64))
+            if window.left_clicking == True:
+                if mX > xOffset + 30 and mX < xOffset + 30 + image_.get_width() \
+                and my > window.screenY + 20 and my < window.screenY + 20 + image_.get_height():
+                    print('changed preview image')
+                    self.selectedImageToAdd = image
+                    self.img = pygame.image.load(f'Bin/assets/images/{self.selectedImageToAdd}')
+                    window.editoruiElements['Object image'].updateText(f'Object image: {self.selectedImageToAdd}')
+            window.screen.blit(image_, (xOffset + 30, window.screenY + 20))
+            xOffset += image_.get_width() + 15
 
         self.check_editor_buttons(window)
 
@@ -554,8 +652,8 @@ class EDITOR():
                         file = input(f'{bcolors.HEADER}Save file name: {bcolors.ENDC}')
                         window.save_map(f'Bin/assets/data/{file}')
                     elif button.name == 'Load_MAP':
-                        file = input(f'{bcolors.HEADER}Load file name: {bcolors.ENDC}')
-                        window.load_map(f'Bin/assets/data/{file}')
+                        window.loaded_map = input(f'{bcolors.HEADER}Load file name: {bcolors.ENDC}')
+                        window.load_map(f'Bin/assets/data/{window.loaded_map}')
                     elif button.name == 'Bind_Function':
                         function = input(f'{bcolors.HEADER}Function name: {bcolors.ENDC}')
                         self.objectFunction = function
@@ -569,11 +667,43 @@ class EDITOR():
                         name = input(f"{bcolors.HEADER}Object's name: {bcolors.ENDC}")
                         self.objectName = name
                     elif button.name == 'Remove_Name':
-                        self.objectName = ''
+                        self.objectName = ''      
+                    elif button.name == 'Images_Left':
+                        if len(self.images) > 1:
+                            if self.currImageList == 0:
+                                self.currImageList = len(self.images) - 1
+                            else:
+                                self.currImageList -= 1
+                    elif button.name == 'Images_Right':
+                        if len(self.images) > 1:
+                            if self.currImageList == len(self.images) - 1:
+                                self.currImageList = 0
+                            else:
+                                self.currImageList += 1
+                    elif button.name == 'Modify_Object':
+                        if self.selectedObject != '':
+                            propertie = input(f'{bcolors.HEADER}Property to modify(name/function/type/pos): {bcolors.ENDC}')
+                            if propertie == 'name':
+                                window.objects[self.selectedObject].name = input(f'{bcolors.HEADER}Enter a new name(lower Case): {bcolors.ENDC}')
+                            elif propertie == 'type':
+                                window.objects[self.selectedObject].type = input(f'{bcolors.HEADER}Enter a new type(static, fluid): {bcolors.ENDC}')
+                            elif propertie == 'function':
+                                function =  input(f'{bcolors.HEADER}Enter a new function(lower Case): {bcolors.ENDC}')
+                                for function_ in window.functions:
+                                    if function == function_.__name__:
+                                        window.objects[self.selectedObject].function = function_
+                                        break
+                            elif propertie == 'pos':
+                                window.objects[self.selectedObject].start_pos = (float(input(f'{bcolors.HEADER}Enter a new X coordinate: {bcolors.ENDC}')), float(input(f'{bcolors.HEADER}Enter a new Y coordinate: {bcolors.ENDC}')))
+                            window.save_map(f'Bin/assets/data/{window.loaded_map}')
+                            window.load_map(f'Bin/assets/data/{window.loaded_map}')
+                        else:
+                            print(f'{bcolors.WARNING}No object was selectionned.{bcolors.ENDC}')
+                            print(f'{bcolors.WARNING}Please select an object to continue{bcolors.ENDC}')
+                        
 
 
-        
-
+    
 
 class ANIMATOR():
     pass

@@ -3,11 +3,11 @@ import Bin.Engine as Engine
 
 def player(body, deltatime):
 
+
     def start():
         body.xspeed = 3
         body.yvelocity = 0
         body.gravity = 1
-        body.movement = [0,0]
         body.jumping = False
         body.jumpForce = 8
 
@@ -15,8 +15,10 @@ def player(body, deltatime):
     def update():
         if Engine.check_key_pressed(Engine.pygame.K_a):
             body.movement[0] = -body.xspeed * deltatime
+            body.appRef.xView = 'left'
         elif Engine.check_key_pressed(Engine.pygame.K_d):
             body.movement[0] = body.xspeed * deltatime
+            body.appRef.xView = 'right'
 
 
         if Engine.check_key_pressed(Engine.pygame.K_SPACE) and body.jumping == False:
