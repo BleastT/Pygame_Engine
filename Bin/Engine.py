@@ -1,3 +1,4 @@
+from operator import truediv
 import pygame
 import sys
 import math
@@ -139,7 +140,7 @@ class APPLICATION():
     
     pygame.init()
 
-    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, edit_mode=False, editor_width=400, editor_height=100, deltatime_used=False, window_name='pygame window') -> None:
+    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, edit_mode=False, editor_width=430, editor_height=220  , deltatime_used=False, window_name='pygame window') -> None:
              ##WINDOW PARAMETERS AND VARIABLES
         self.screenRes = screenRes
         self.displayRes = displayRes
@@ -307,12 +308,12 @@ class APPLICATION():
             ui.name = 'editoruiElement_' + str(ui.xpos) + str(ui.ypos)
         self.editoruiElements[ui.name] = ui
 
-    def activateCameraFollow(self,name, follow_axis=(True, True), yView='center', xView='center', cam_smooth=False):
+    def activateCameraFollow(self,name, follow_axis=(True, True), yView='center', xView='center', camDelay=(1,1)):
         self.objToFollow = name # set the cmerafollow
         self.follow_axis = follow_axis
         self.yView = yView
         self.xView = xView
-        self.cam_smooth = cam_smooth
+        self.camDelayX, self.camDelayY = camDelay
     def deactivateCameraFollow(self):
         self.objToFollow = ''
 
@@ -332,37 +333,21 @@ class APPLICATION():
                 object = self.objects[self.objToFollow]
                 width, height = self.displayRes
                 x,y = self.follow_axis
-                if self.cam_smooth == True:
-                    if x == True:
-                        if self.xView == 'center':
-                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX * self.deltatime
-                        if self.xView == 'right':
-                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 + (width / 4)) * self.camDelayX * self.deltatime
-                        if self.xView == 'left':
-                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 - (width / 4)) * self.camDelayX * self.deltatime
-                        
-                    if y == True:
-                        if self.yView == 'center':
-                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY * self.deltatime
-                        elif self.yView == 'top':
-                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  - (height / 4)) * self.camDelayY * self.deltatime
-                        elif self.yView == 'bottom':
-                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  + (height / 4)) * self.camDelayY * self.deltatime
-                else: 
-                    if x == True:
-                        if self.xView == 'center':
-                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2)
-                        if self.xView == 'right':
-                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 + (width / 4)) 
-                        if self.xView == 'left':
-                            self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 - (width / 4)) 
-                    if y == True:
-                        if self.yView == 'center':
-                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2)
-                        elif self.yView == 'top':
-                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  - (height / 4))
-                        elif self.yView == 'bottom':
-                            self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  + (height / 4))
+                if x == True:
+                    if self.xView == 'center':
+                        self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2) * self.camDelayX
+                    if self.xView == 'right':
+                        self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 + (width / 4)) * self.camDelayX
+                    if self.xView == 'left':
+                        self.camerax += (object.rect.x - (self.camerax + (width / 2)) + object.width / 2 - (width / 4)) * self.camDelayX
+                    
+                if y == True:
+                    if self.yView == 'center':
+                        self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2) * self.camDelayY
+                    elif self.yView == 'top':
+                        self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  - (height / 4)) * self.camDelayY
+                    elif self.yView == 'bottom':
+                        self.cameray += (object.rect.y - (self.cameray + (height / 2)) + object.height / 2  + (height / 4)) * self.camDelayY
 
 
     def cam_position(self):
@@ -407,6 +392,12 @@ class APPLICATION():
                     parameter[10] = True
                 elif parameter[10] == 'false':
                     parameter[10] = False
+
+                if parameter[8] == 'true':
+                    parameter[8] = True
+                elif parameter[8] == 'false':
+                    parameter[8] = False
+                # text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {x}, {y}, {curr_object.width}, {curr_object.height}, {function_info}, {curr_object.animated}, {curr_object.anim_path}, {curr_object.collideable}')
                 self.createObject(OBJECT(parameter[0], parameter[1], parameter[2], (float(parameter[3]), float(parameter[4])), (float(parameter[5]), float(parameter[6])), parameter[7], parameter[8], parameter[9], parameter[10]))
             print(f'{bcolors.OKGREEN}[CHECK] - Map successfully loaded{bcolors.ENDC}')
         except Exception as e:
@@ -512,10 +503,11 @@ class EDITOR():
         window.createEditorUIElement(UITEXT(name='Object name', font_size=20, pos=(window.screenX + 20, 310)))
         window.createEditorUIElement(UITEXT(name='Object image', font_size=20, pos=(window.screenX + 20, 360)))
         window.createEditorUIElement(UITEXT(name='CollideableText', font_size=20, pos=(window.screenX + 20, 410)))
+        window.createEditorUIElement(UITEXT(name='AnimatedText', font_size=20, pos=(window.screenX + 20, 460)))
 
 
-        window.createEditorUIElement(UIBUTTON(name='Save_MAP', font_size=20 , pos=(window.screenX +20, 460)))
-        window.createEditorUIElement(UIBUTTON(name='Load_MAP', font_size=20 , pos=(window.screenX +20, 510)))
+        window.createEditorUIElement(UIBUTTON(name='Save_MAP', font_size=20 , pos=(window.screenX +20, 510)))
+        window.createEditorUIElement(UIBUTTON(name='Load_MAP', font_size=20 , pos=(window.screenX +140, 510)))
         window.createEditorUIElement(UIBUTTON(name='Bind_Function', font_size=20 , pos=(window.screenX +20, 560), button_width=130))
         window.createEditorUIElement(UIBUTTON(name='Remove_Function', font_size=20 , pos=(window.screenX +160, 560), button_width=160))
         window.createEditorUIElement(UIBUTTON(name='Static', font_size=20 , pos=(window.screenX +20, 610)))
@@ -524,7 +516,9 @@ class EDITOR():
         window.createEditorUIElement(UIBUTTON(name='Remove_Name', font_size=20 , pos=(window.screenX +140, 660), button_width=140))
         window.createEditorUIElement(UIBUTTON(name='Modify_Object', font_size=20 , pos=(window.screenX +20, 710), button_width=130))
         window.createEditorUIElement(UIBUTTON(name='Collideable', font_size=20 , pos=(window.screenX +20, 760), button_width=130))
-        window.createEditorUIElement(UIBUTTON(name='!Collideable', font_size=20 , pos=(window.screenX +170, 760), button_width=130))
+        window.createEditorUIElement(UIBUTTON(name='!Collideable', font_size=20 , pos=(window.screenX +170, 760), button_width=140))
+        window.createEditorUIElement(UIBUTTON(name='Animated', font_size=20 , pos=(window.screenX +20, 810)))
+        window.createEditorUIElement(UIBUTTON(name='!Animated', font_size=20 , pos=(window.screenX +140, 810), button_width=140))
         window.createEditorUIElement(UIBUTTON(name='Images_Left', font_size=20 , pos=(10, window.screenY + 20)))
         window.createEditorUIElement(UIBUTTON(name='Images_Right', font_size=20 , pos=(600, window.screenY + 20)))
 
@@ -542,7 +536,9 @@ class EDITOR():
         window.editoruiElements['Images_Left'].updateText('Left')
         window.editoruiElements['Images_Right'].updateText('Right')
         window.editoruiElements['Collideable'].updateText('Collideable')
-        window.editoruiElements['!Collideable'].updateText('!Collideable')
+        window.editoruiElements['!Collideable'].updateText('Not Collideable')
+        window.editoruiElements['Animated'].updateText('Animated')
+        window.editoruiElements['!Animated'].updateText('Not Animated')
 
             
         self.images = []
@@ -570,6 +566,8 @@ class EDITOR():
 
         ## create Object parameters
         self.objectType = 'static'
+        self.anim_path = None
+        self.animated = False
         self.objectFunction = None
         self.is_Collideable = False
         self.objectName = ''
@@ -581,6 +579,7 @@ class EDITOR():
         window.editoruiElements['Object function'].updateText(f'Object function: {self.objectFunction}')
         window.editoruiElements['Object name'].updateText(f'Object name: {self.objectName}')
         window.editoruiElements['CollideableText'].updateText(f'Is Object Collideable: {self.is_Collideable}')
+        window.editoruiElements['AnimatedText'].updateText(f'Is Object Animated: {self.animated}')
 
         if self.selectedObject != '':
             window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: {window.get(self.selectedObject).position()}")
@@ -589,7 +588,7 @@ class EDITOR():
             window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: N/A")
             window.editoruiElements['SelectedObjectName'].updateText(f"Selected Object Name: N/A")
 
-        window.editoruiElements['CameraPos'].updateText(f"Camera Position: ({window.camerax},{window.cameray})")
+        window.editoruiElements['CameraPos'].updateText(f"Camera Position: ({round(window.camerax)},{round(window.cameray)})")
         if window.play == False:
             window.editoruiElements['GameMode'].updateText(f"PAUSE")
         else:
@@ -613,12 +612,12 @@ class EDITOR():
             pygame.draw.rect(window.display, (0,0,0), objectPreviewRect, 1) 
             if window.left_clicking == True:
                 if len(window.objects) == 0:
-                    window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction, collideable=self.is_Collideable))
+                    window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction,animated=self.animated, anim_path=self.anim_path, collideable=self.is_Collideable))
                 else:
                     for object in window.objects:
                         curr_object = window.objects[object]
                         if  self.check_mouse_inside(mouseX, mouseY, curr_object) == False:
-                            window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName ,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction, collideable=self.is_Collideable))
+                            window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName ,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction,animated=self.animated, anim_path=self.anim_path, collideable=self.is_Collideable))
                             break
             elif window.right_clicking == True:
                 for object in window.objects:
@@ -722,6 +721,12 @@ class EDITOR():
                         self.is_Collideable = True
                     elif button.name == '!Collideable':
                         self.is_Collideable = False
+                    elif button.name == 'Animated':
+                        self.animated = True
+                        self.anim_path = 'Bin/assets/animations/' + input('Animations folder name: ')
+                    elif button.name == '!Animated':
+                        self.animated = False
+                        self.anim_path = None
 
 
 class ANIMATOR():

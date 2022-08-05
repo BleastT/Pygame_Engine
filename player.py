@@ -10,7 +10,8 @@ def player(body, deltatime):
         body.gravity = 1
         body.jumping = False
         body.jumpForce = 8
-        body.appRef.activateCameraFollow(body.name)
+        body.appRef.activateCameraFollow(body.name, follow_axis = (True, False), camDelay = (.1,1))
+        body.animator.changeAnimState('walk')
 
 
     def update():
@@ -20,6 +21,8 @@ def player(body, deltatime):
         elif Engine.check_key_pressed(Engine.pygame.K_d):
             body.movement[0] = body.xspeed * deltatime
             body.appRef.xView = 'right'
+        elif body.movement == [0,0]:
+            body.appRef.xView = 'center'
 
 
         if Engine.check_key_pressed(Engine.pygame.K_SPACE) and body.jumping == False:
