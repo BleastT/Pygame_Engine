@@ -229,50 +229,51 @@ class APPLICATION():
 
 
     def update(self):
-        try:
-            self.display.fill((45, 175, 245))
-            self.screen.fill((0,0,0))
-            self.CameraMove()
-            if self.deltatime_used == True:
-                delta = self.deltatime
-            else:
-                delta = 1
-            for object in self.objects:
-                curr_object = self.objects[object]
-                if curr_object.type != 'static' and self.play == True:
-                    curr_object.update(delta, self) # update the object
-                    curr_object.collider(self.objects)
-                self.renderObject(curr_object)
+        self.display.fill((45, 175, 245))
+        self.screen.fill((0,0,0))
+        self.CameraMove()
+        if self.deltatime_used == True:
+            delta = self.deltatime
+        else:
+            delta = 1
+        for object in self.objects:
+            curr_object = self.objects[object]
+            if curr_object.type != 'static' and self.play == True:
+                # try:
+                curr_object.update(delta, self) # update the object
+                # except Exception as e:
+                #     print(f"{bcolors.FAIL}\n\n\n[ERROR] - During {curr_object.name} update function {bcolors.ENDC}")
+                #     print(f'        {e}')
+                curr_object.collider(self.objects)
+            self.renderObject(curr_object)
 
 
-            if self.show_fps == True and self.play == True:
-                self.uiElements['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
+        if self.show_fps == True and self.play == True:
+            self.uiElements['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
 
-            if self.is_editorMode == True:
-                self.Editor.update(self)
+        if self.is_editorMode == True:
+            self.Editor.update(self)
 
-            ###ADD Game UI ELEMENTS
-            for ui in self.uiElements:
-                currUI = self.uiElements[ui]
-                self.display.blit(currUI.text, currUI.position())
-            surf = pygame.transform.scale(self.display, self.screenRes)
-            self.screen.blit(surf, (0,0))
+        ###ADD Game UI ELEMENTS
+        for ui in self.uiElements:
+            currUI = self.uiElements[ui]
+            self.display.blit(currUI.text, currUI.position())
+        surf = pygame.transform.scale(self.display, self.screenRes)
+        self.screen.blit(surf, (0,0))
 
 
-            ###ADD Editor UI ELEMENTS
-            for editorui in self.editoruiElements:
-                currUI = self.editoruiElements[editorui]
-                if type(currUI) == UIBUTTON:
-                    currUI.check_click(self)
-                    pygame.draw.rect(self.screen, (255,0,200), pygame.Rect(currUI.position(), (currUI.button_width, currUI.button_height)))
-                self.screen.blit(currUI.text, currUI.position())
+        ###ADD Editor UI ELEMENTS
+        for editorui in self.editoruiElements:
+            currUI = self.editoruiElements[editorui]
+            if type(currUI) == UIBUTTON:
+                currUI.check_click(self)
+                pygame.draw.rect(self.screen, (255,0,200), pygame.Rect(currUI.position(), (currUI.button_width, currUI.button_height)))
+            self.screen.blit(currUI.text, currUI.position())
 
-            self.clock.tick(self.max_fps) #update the fps
-            self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
-            pygame.display.update() # show the screen to the player
-        except Exception as e:
-            print(f"{bcolors.FAIL}\n\n\n[ERROR] - During Game loop{bcolors.ENDC}")
-            print(f'        {e}')
+        self.clock.tick(self.max_fps) #update the fps
+        self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
+        pygame.display.update() # show the screen to the player
+
 
 
         
@@ -426,7 +427,7 @@ class OBJECT():
         self.animated = animated
         self.anim_path = anim_path
         if self.animated == True:
-            self.animator = ANIMATOR()
+            self.animator = ANIMATOR(anim_path)
         
         self.appRef = None
 
@@ -447,6 +448,9 @@ class OBJECT():
 
     def update(self, deltatime, app):
         self.appRef = app
+        if self.animated == True:
+            self.img = self.animator.updateAnimations()
+
         if self.function != None:
             return self.function(self, deltatime)
         else:
@@ -706,7 +710,32 @@ class EDITOR():
     
 
 class ANIMATOR():
-    pass
+    def __init__(self, anim_path, size) -> None:
+        self.anim_path = anim_path
+        self.animStates = {}
+        for folder in os.listdir(self.anim_path):
+            array = []
+            for file in os.listdir(self.anim_path + '/' + folder):
+                array.append(pygame.image.load(self.anim_path + '/' + folder + '/' + file))
+            self.animStates[folder] = array
+        self.currAnimState = None
+        self.currFrame = 0
+
+    def changeAnimState(self, state):
+        self.currAnimState = state
+
+    def updateAnimations(self):
+        frame = self.animStates[self.currAnimState][self.currFrame]
+        self.currFrame += 1
+        if self.currFrame > len(self.animStates[self.currAnimState]) - 1:
+            self.currFrame = 0
+
+        return frame
+
+
+
+    
+
 
 class UI:
     def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20) -> None:
