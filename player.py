@@ -10,6 +10,7 @@ def player(body, deltatime):
         body.gravity = 1
         body.jumping = False
         body.jumpForce = 8
+        body.appRef.activateCameraFollow(body.name)
 
 
     def update():
