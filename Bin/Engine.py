@@ -1,4 +1,4 @@
-from operator import truediv
+from unicodedata import category
 import pygame
 import sys
 import math
@@ -100,7 +100,7 @@ def encrypt_decrypt(text_to_encrypt, mode=0):
 
     return return_text
 
-def convert_to_text(objects):
+def convert_to_text(objects, uis):
     text = []
     for object in objects:
         curr_object = objects[object]
@@ -110,7 +110,16 @@ def convert_to_text(objects):
         else:
             function_info = 'None'
         x,y = curr_object.start_pos
-        text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {x}, {y}, {curr_object.width}, {curr_object.height}, {function_info}, {curr_object.animated}, {curr_object.anim_path}, {curr_object.collideable}')
+        text.append(f'object, {curr_object.img_path}, {curr_object.name}, {curr_object.type}, {curr_object.category}, {x}, {y}, {curr_object.width}, {curr_object.height}, {function_info}, {curr_object.animated}, {curr_object.anim_path}, {curr_object.collideable}')
+
+    for ui in uis:
+        curr_ui = uis[ui]
+        # name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20, button_width=100, button_heigth=30
+        if type(curr_ui) == UIBUTTON:
+            text.append(f'button, {curr_ui.name}, {curr_ui.font_path}, {curr_ui.x}, {curr_ui.y}, {curr_ui.font_size}, {curr_ui.button_width}, {curr_ui.button_height}')
+        elif type(curr_ui) == UITEXT:
+            text.append(f'text, {curr_ui.name}, {curr_ui.font_path}, {curr_ui.x}, {curr_ui.y}, {curr_ui.font_size}')
+
 
     return text
 
@@ -140,7 +149,7 @@ class APPLICATION():
     
     pygame.init()
 
-    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, edit_mode=False, editor_width=430, editor_height=220  , deltatime_used=False, window_name='pygame window') -> None:
+    def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, edit_mode=False, editor_width=430, editor_height=220  , window_name='pygame window') -> None:
              ##WINDOW PARAMETERS AND VARIABLES
         self.screenRes = screenRes
         self.displayRes = displayRes
@@ -155,13 +164,14 @@ class APPLICATION():
         pygame.display.set_caption(window_name)
             ##GAMEPLAY VARIABLES
         self.objects =  {}
+        self.objects_to_add = {}
+        self.objects_to_remove = []
         self.uiElements = {}
         self.functions = []
         self.editoruiElements = {}
         self.running = True
         self.clock = pygame.time.Clock()
         self.deltatime = 1
-        self.deltatime_used = deltatime_used
             ##CAMERA VARIABLES
         self.camerax = 0
         self.cameray = 0
@@ -233,34 +243,40 @@ class APPLICATION():
         self.display.fill((45, 175, 245))
         self.screen.fill((0,0,0))
         self.CameraMove()
-        if self.deltatime_used == True:
-            delta = self.deltatime
-        else:
-            delta = 1
         for object in self.objects:
             curr_object = self.objects[object]
-            if self.play == True:
-                # try:
-                curr_object.update(delta, self) # update the object
-                if curr_object.animated == True:
-                    curr_object.img = curr_object.animator.updateAnimations(self.deltatime)
-                # except Exception as e:
-                #     print(f"{bcolors.FAIL}\n\n\n[ERROR] - During {curr_object.name} update function {bcolors.ENDC}")
-                #     print(f'        {e}')
-                curr_object.collider(self.objects)
-            self.renderObject(curr_object)
+            if curr_object.enabled:
+                if self.play == True:
+                    # try:
+                    curr_object.update(self) # update the object
+                    if curr_object.animated == True:
+                        curr_object.img = curr_object.animator.updateAnimations(self.deltatime)
+                    # except Exception as e:
+                    #     print(f"{bcolors.FAIL}\n\n\n[ERROR] - During {curr_object.name} update function {bcolors.ENDC}")
+                    #     print(f'        {e}')
+                self.renderObject(curr_object)
+
+        for obj in self.objects_to_add:
+            curr_obj = self.objects_to_add[obj]
+            self.objects[curr_obj.name] = curr_obj
+        self.objects_to_add.clear()
+
+        if self.is_editorMode == True:
+            self.Editor.update(self)
+
+        for obj in self.objects_to_remove:
+            self.objects.pop(obj)
+        self.objects_to_remove = []
 
 
         if self.show_fps == True and self.play == True:
             self.uiElements['FPS'].updateText(f'FPS: {math.floor(self.clock.get_fps())}') # display fps to the screen
 
-        if self.is_editorMode == True:
-            self.Editor.update(self)
-
         ###ADD Game UI ELEMENTS
         for ui in self.uiElements:
             currUI = self.uiElements[ui]
-            self.display.blit(currUI.text, currUI.position())
+            if currUI.enabled == True:
+                self.display.blit(currUI.text, currUI.position())
         surf = pygame.transform.scale(self.display, self.screenRes)
         self.screen.blit(surf, (0,0))
 
@@ -273,40 +289,80 @@ class APPLICATION():
                 pygame.draw.rect(self.screen, (255,0,200), pygame.Rect(currUI.position(), (currUI.button_width, currUI.button_height)))
             self.screen.blit(currUI.text, currUI.position())
 
+
+
         self.clock.tick(self.max_fps) #update the fps
         # print(self.clock.get_tick())
         self.deltatime = self.clock.get_time() / 1000 # calculate the deltatime
         pygame.display.update() # show the screen to the player
-
-
-
         
 
     def createObject(self, object):
-        if object.name == '':
-            object.name = 'object_' + str(object.rect.x) + str(object.rect.y)
+        new_name = object.name
+        curr_nbr = 0
+
+        if new_name == '':
+            new_name = 'object'
 
         if object.function != None and object.function != 'none':
             for function in self.functions:
                 if object.function == function.__name__:
                     object.function = function
                     break
-        
-        self.objects[object.name] = object # add new object to the list
 
-
-        print(f"{bcolors.OKGREEN}[CHECK] {object.name.upper()} initialized{bcolors.ENDC}")
+        while True:
+            if new_name in self.objects:
+                curr_nbr += 1
+                if '_' in new_name:
+                    new_name = new_name.split('_')[0] + '_' + str(curr_nbr)
+                else:
+                    new_name = new_name + '_' + str(curr_nbr)
+                
+            else:
+                object.name = new_name
+                self.objects_to_add[new_name] = object
+                print(f"{bcolors.OKGREEN}[CHECK] {object.name.upper()} initialized{bcolors.ENDC}")
+                break
 
     def createUIElement(self, ui):
-        if ui.name == '':
-            ui.name = 'uiElement_' + str(ui.xpos) + str(ui.ypos)
-        self.uiElements[ui.name] = ui
+        new_name = ui.name
+        curr_nbr = 0
 
-        print(f"{bcolors.OKGREEN}[CHECK] {ui.name.upper()} initialized{bcolors.ENDC}")
+        if new_name == '':
+            new_name = 'ui'
+
+        while True:
+            if new_name in self.objects:
+                curr_nbr += 1
+                if '_' in new_name:
+                    new_name = new_name.split('_')[0] + '_' + str(curr_nbr)
+                else:
+                    new_name = new_name + '_' + str(curr_nbr)
+            else:
+                ui.name = new_name
+                self.uiElements[new_name] = ui
+                print(f"{bcolors.OKGREEN}[CHECK] {ui.name.upper()} initialized{bcolors.ENDC}")
+                break
+
     def createEditorUIElement(self, ui):
-        if ui.name == '':
-            ui.name = 'editoruiElement_' + str(ui.xpos) + str(ui.ypos)
-        self.editoruiElements[ui.name] = ui
+        new_name = ui.name
+        curr_nbr = 0
+
+        if new_name == '':
+            new_name = 'ui'
+
+        while True:
+            if new_name in self.objects:
+                curr_nbr += 1
+                if '_' in new_name:
+                    new_name = new_name.split('_')[0] + '_' + str(curr_nbr)
+                else:
+                    new_name = new_name + '_' + str(curr_nbr)
+            else:
+                ui.name = new_name
+                self.editoruiElements[new_name] = ui
+                break
+
 
     def activateCameraFollow(self,name, follow_axis=(True, True), yView='center', xView='center', camDelay=(1,1)):
         self.objToFollow = name # set the cmerafollow
@@ -318,7 +374,7 @@ class APPLICATION():
         self.objToFollow = ''
 
     def CameraMove(self):
-        if self.play == False:
+        if self.play == False and self.is_editorMode == True:
             if check_key_pressed(pygame.K_a):
                 self.camerax += -self.cameraxSpeed 
             elif check_key_pressed(pygame.K_d):
@@ -368,15 +424,16 @@ class APPLICATION():
             return False
 
     def renderObject(self, object):
-        object.displayx = object.rect.x - self.camerax
-        object.displayy = object.rect.y - self.cameray
+        if object.img != None:
+            object.displayx = object.rect.x - self.camerax
+            object.displayy = object.rect.y - self.cameray
 
-        if self.is_object_inside_preview(object) == True:
-            self.display.blit(object.img, (object.displayx, object.displayy))
+            if self.is_object_inside_preview(object) == True:
+                self.display.blit(object.img, (object.displayx, object.displayy))
 
     def save_map(self, file_path):
         try:
-            write_to_file(file_path,encrypt_decrypt(convert_to_text(self.objects)))
+            write_to_file(file_path,encrypt_decrypt(convert_to_text(self.objects, self.uiElements)))
             print(f'{bcolors.OKGREEN}[CHECK] - Map successfully saved{bcolors.ENDC}')
         except Exception as e:     
             print(f"{bcolors.FAIL}\n\n\n[ERROR] - During map save event{bcolors.ENDC}")
@@ -388,24 +445,29 @@ class APPLICATION():
             self.objects.clear()
             for object in objects:
                 parameter = object.replace(',', ' ').split()
-                if parameter[10] == 'true':
-                    parameter[10] = True
-                elif parameter[10] == 'false':
-                    parameter[10] = False
+                if parameter[0] == 'object':
+                    if parameter[10] == 'true':
+                        parameter[10] = True
+                    elif parameter[10] == 'false':
+                        parameter[10] = False
 
-                if parameter[8] == 'true':
-                    parameter[8] = True
-                elif parameter[8] == 'false':
-                    parameter[8] = False
-                # text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {x}, {y}, {curr_object.width}, {curr_object.height}, {function_info}, {curr_object.animated}, {curr_object.anim_path}, {curr_object.collideable}')
-                self.createObject(OBJECT(parameter[0], parameter[1], parameter[2], (float(parameter[3]), float(parameter[4])), (float(parameter[5]), float(parameter[6])), parameter[7], parameter[8], parameter[9], parameter[10]))
+                    if parameter[8] == 'true':
+                        parameter[8] = True
+                    elif parameter[8] == 'false':
+                        parameter[8] = False
+                    # text.append(f'{curr_object.img_path}, {curr_object.name}, {curr_object.type}, {x}, {y}, {curr_object.width}, {curr_object.height}, {function_info}, {curr_object.animated}, {curr_object.anim_path}, {curr_object.collideable}')
+                    self.createObject(OBJECT(parameter[1], parameter[2], parameter[3],parameter[4], (float(parameter[5]), float(parameter[6])), (float(parameter[7]), float(parameter[8])), parameter[9], parameter[10], parameter[11], parameter[12]))
+                elif parameter[0] == 'button':
+                    pass
+                elif parameter[0] == 'text':
+                    pass
             print(f'{bcolors.OKGREEN}[CHECK] - Map successfully loaded{bcolors.ENDC}')
         except Exception as e:
             print(f"{bcolors.FAIL}\n\n\n[ERROR] - During map load event{bcolors.ENDC}")
             print(f'        {e}')
 
 class OBJECT():
-    def __init__(self, img_path, name,type, start_pos=(0,0), size=(0,0), function=None, animated=False, anim_path=None, collideable=False) -> None:
+    def __init__(self, img_path, name='',type='static',category=None, start_pos=(0,0), size=(0,0), function=None, animated=False, anim_path=None, collideable=False) -> None:
         self.img = pygame.image.load(img_path)
         if size != (0,0):
             self.image = pygame.transform.scale(self.img, size)
@@ -418,6 +480,8 @@ class OBJECT():
         self.type = type
         self.function = function
         self.collideable = collideable
+        self.enabled = True
+        self.category = category
 
         self.displayx = 0
         self.displayy = 0
@@ -428,12 +492,40 @@ class OBJECT():
         self.anim_path = anim_path
         if self.animated == True:
             self.animator = ANIMATOR(anim_path, (self.width, self.height))
+
+        self.all_collision = []
         
         self.appRef = None
 
   
     def move_by(self, x, y): # add a value to th existant position of the object
+        self.all_collision = []
+        self.collision_types = {'Top': False, 'Bottom':False, 'Left':False, 'Right':False}
         self.rect.x += x
+        hitlist = self.collision_test(self.appRef.objects)
+        if self.collideable == True:
+            for other in hitlist:
+                    if x > 0:
+                        self.rect.right = other.left
+                        self.collision_types['Right'] = True
+                    elif x < 0:
+                        self.rect.left = other.right
+                        self.collision_types['Left'] = True
+
+        self.rect.y += y
+        hitlist = self.collision_test(self.appRef.objects)
+        if self.collideable == True:
+            for other in hitlist:
+                    if y > 0:
+                        self.rect.right = other.left
+                        self.collision_types['Right'] = True
+                    elif y < 0:
+                        self.rect.left = other.right
+                        self.collision_types['Left'] = True
+
+
+
+
         self.rect.y += y
 
     def move_to (self, x , y): # set a new value to the position of the object
@@ -446,13 +538,16 @@ class OBJECT():
         return self.width, self.height
 
 
-    def update(self, deltatime, app):
+    def update(self, app):
         self.appRef = app
 
         if self.function != None and self.function != 'none':
-            return self.function(self, deltatime)
+            return self.function(self)
         else:
            return 
+
+    def delete(self):
+        self.appRef.objects_to_remove.append(self.name)
     def collision_test(self, objects):
         hitlist = []
         for object in objects:
@@ -460,43 +555,25 @@ class OBJECT():
             if curr_object == self:
                 pass
             else:
-                if self.rect.colliderect(curr_object.rect) and curr_object.collideable == True:
-                    hitlist.append(curr_object.rect)
+                if self.rect.colliderect(curr_object.rect):
+                    self.all_collision.append([curr_object.name, curr_object.category])
+                    if curr_object.collideable == True:
+                        hitlist.append(curr_object.rect)
 
         return hitlist
 
-    def collider(self, others):
-        self.collision_types = {'Top': False, 'Bottom':False, 'Left':False, 'Right':False}
-        self.move_by(self.movement[0], 0)
-        if self.collideable == True:
-            hitlist = self.collision_test(others)
-            for other in hitlist:
-                if self.movement[0] > 0:
-                    self.rect.right = other.left
-                    self.collision_types['Right'] = True
-                elif self.movement[0] < 0:
-                    self.rect.left = other.right
-                    self.collision_types['Left'] = True
-        self.move_by(0, self.movement[1])
-        if self.collideable == True:
-            hitlist = self.collision_test(others)
-            for other in hitlist:
-                if self.movement[1] < 0:
-                    self.rect.top = other.bottom
-                    self.collision_types['Top'] = True
-                elif self.movement[1] > 0:
-                    self.rect.bottom = other.top
-                    self.collision_types['Bottom'] = True
 
-        self.movement = [0,0]
-
+    def collided_with(self, name, type=0):
+        for col in self.all_collision:
+            if col[type] == name:
+                return True
 class EDITOR():
 
     def __init__(self,window) -> None:
         window.createEditorUIElement(UITEXT(name='Titlefont', font_size=32, pos=(window.screenX, 0)))
-        window.createEditorUIElement(UITEXT(name='SelectedObjectPos', font_size=24, pos=(window.screenX + 20, 60)))
-        window.createEditorUIElement(UITEXT(name='SelectedObjectName', font_size=24, pos=(window.screenX + 20, 120)))
-        window.createEditorUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 160)))
+        window.createEditorUIElement(UITEXT(name='CameraPos', font_size=24, pos=(window.screenX + 20, 60)))
+        window.createEditorUIElement(UITEXT(name='ObjectPos', font_size=20, pos=(window.screenX + 20, 110)))
+        window.createEditorUIElement(UITEXT(name='ObjectName', font_size=20, pos=(window.screenX + 20, 160)))
         window.createEditorUIElement(UITEXT(name='GameMode', font_size=50, pos=(window.screenX / 2 - 50, 10), color=(255,0,0)))
         window.createEditorUIElement(UITEXT(name='Object type', font_size=20, pos=(window.screenX + 20, 210)))
         window.createEditorUIElement(UITEXT(name='Object function', font_size=20, pos=(window.screenX + 20, 260)))
@@ -508,37 +585,19 @@ class EDITOR():
 
         window.createEditorUIElement(UIBUTTON(name='Save_MAP', font_size=20 , pos=(window.screenX +20, 510)))
         window.createEditorUIElement(UIBUTTON(name='Load_MAP', font_size=20 , pos=(window.screenX +140, 510)))
-        window.createEditorUIElement(UIBUTTON(name='Bind_Function', font_size=20 , pos=(window.screenX +20, 560), button_width=130))
-        window.createEditorUIElement(UIBUTTON(name='Remove_Function', font_size=20 , pos=(window.screenX +160, 560), button_width=160))
-        window.createEditorUIElement(UIBUTTON(name='Static', font_size=20 , pos=(window.screenX +20, 610)))
-        window.createEditorUIElement(UIBUTTON(name='Fluid', font_size=20 , pos=(window.screenX +140, 610)))
-        window.createEditorUIElement(UIBUTTON(name='Add_Name', font_size=20 , pos=(window.screenX +20, 660)))
-        window.createEditorUIElement(UIBUTTON(name='Remove_Name', font_size=20 , pos=(window.screenX +140, 660), button_width=140))
         window.createEditorUIElement(UIBUTTON(name='Modify_Object', font_size=20 , pos=(window.screenX +20, 710), button_width=130))
-        window.createEditorUIElement(UIBUTTON(name='Collideable', font_size=20 , pos=(window.screenX +20, 760), button_width=130))
-        window.createEditorUIElement(UIBUTTON(name='!Collideable', font_size=20 , pos=(window.screenX +170, 760), button_width=140))
-        window.createEditorUIElement(UIBUTTON(name='Animated', font_size=20 , pos=(window.screenX +20, 810)))
-        window.createEditorUIElement(UIBUTTON(name='!Animated', font_size=20 , pos=(window.screenX +140, 810), button_width=140))
+        window.createEditorUIElement(UIBUTTON(name='Modify_tile_Object', font_size=20 , pos=(window.screenX +140, 710), button_width=130))
         window.createEditorUIElement(UIBUTTON(name='Images_Left', font_size=20 , pos=(10, window.screenY + 20)))
         window.createEditorUIElement(UIBUTTON(name='Images_Right', font_size=20 , pos=(600, window.screenY + 20)))
 
 
         window.editoruiElements['Save_MAP'].updateText('Save Map')
         window.editoruiElements['Load_MAP'].updateText('Load Map')
-        window.editoruiElements['Bind_Function'].updateText('Bind Function')
-        window.editoruiElements['Remove_Function'].updateText('Remove Function')
-        window.editoruiElements['Static'].updateText('Static')
-        window.editoruiElements['Fluid'].updateText('Fluid')
         window.editoruiElements['Titlefont'].updateText('Game Informations')
-        window.editoruiElements['Add_Name'].updateText('Add Name')
-        window.editoruiElements['Remove_Name'].updateText('Remove Name')
         window.editoruiElements['Modify_Object'].updateText('Modify Object')
         window.editoruiElements['Images_Left'].updateText('Left')
         window.editoruiElements['Images_Right'].updateText('Right')
-        window.editoruiElements['Collideable'].updateText('Collideable')
-        window.editoruiElements['!Collideable'].updateText('Not Collideable')
-        window.editoruiElements['Animated'].updateText('Animated')
-        window.editoruiElements['!Animated'].updateText('Not Animated')
+        window.editoruiElements['Modify_tile_Object'].updateText('Modify tile properties')
 
             
         self.images = []
@@ -565,6 +624,7 @@ class EDITOR():
         window.editoruiElements['Object image'].updateText(f'Object image: {self.selectedImageToAdd}')
 
         ## create Object parameters
+        self.obj_Category = ''
         self.objectType = 'static'
         self.anim_path = None
         self.animated = False
@@ -574,19 +634,26 @@ class EDITOR():
         self.loaded_MAP = ''
     def update(self, window):
 
-
-        window.editoruiElements['Object type'].updateText(f'Object type: {self.objectType}')
-        window.editoruiElements['Object function'].updateText(f'Object function: {self.objectFunction}')
-        window.editoruiElements['Object name'].updateText(f'Object name: {self.objectName}')
-        window.editoruiElements['CollideableText'].updateText(f'Is Object Collideable: {self.is_Collideable}')
-        window.editoruiElements['AnimatedText'].updateText(f'Is Object Animated: {self.animated}')
-
         if self.selectedObject != '':
-            window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: {window.get(self.selectedObject).position()}")
-            window.editoruiElements['SelectedObjectName'].updateText(f"Selected Object Name: {self.selectedObject}")
+            window.editoruiElements['ObjectPos'].updateText(f"Object Position: {window.get(self.selectedObject).position()}")
+            window.editoruiElements['ObjectName'].updateText(f"Object Name: {self.selectedObject}")
+            window.editoruiElements['Object type'].updateText(f'Object type: {window.get(self.selectedObject).type}')
+            if type(window.get(self.selectedObject).function).__name__ == 'function':
+                window.editoruiElements['Object function'].updateText(f'Object function: {window.get(self.selectedObject).function.__name__}')
+            else:
+                window.editoruiElements['Object function'].updateText(f'Object function: {window.get(self.selectedObject).function}')
+
+            window.editoruiElements['Object name'].updateText(f'Object name: {window.get(self.selectedObject).name}')
+            window.editoruiElements['CollideableText'].updateText(f'Is Object Collideable: {window.get(self.selectedObject).collideable}')
+            window.editoruiElements['AnimatedText'].updateText(f'Is Object Animated: {window.get(self.selectedObject).animated}')
         else:
-            window.editoruiElements['SelectedObjectPos'].updateText(f"Selected Object Position: N/A")
-            window.editoruiElements['SelectedObjectName'].updateText(f"Selected Object Name: N/A")
+            window.editoruiElements['ObjectPos'].updateText(f"Object Position: N/A")
+            window.editoruiElements['ObjectName'].updateText(f"Object Name: N/A")
+            window.editoruiElements['Object type'].updateText(f'Object type: N/A')
+            window.editoruiElements['Object function'].updateText(f'Object function: N/A')
+            window.editoruiElements['Object name'].updateText(f'Object name: N/A')
+            window.editoruiElements['CollideableText'].updateText(f'Is Object Collideable: N/A')
+            window.editoruiElements['AnimatedText'].updateText(f'Is Object Animated: N/A')
 
         window.editoruiElements['CameraPos'].updateText(f"Camera Position: ({round(window.camerax)},{round(window.cameray)})")
         if window.play == False:
@@ -602,23 +669,17 @@ class EDITOR():
 
         mouseX = pygame.mouse.get_pos()[0] * screenFactorX
         mouseY = pygame.mouse.get_pos()[1] * screenFactorY
-        clippedX = math.ceil(round(mouseX/10, 1) * 10)
-        clippedY = math.ceil(round(mouseY/10,1) * 10)
+        clippedX = math.ceil(round(mouseX/80, 1) * 80)
+        clippedY = math.ceil(round(mouseY/80,1) * 80)
         camX, camY = window.cam_position()
 
         objectPreviewRect = pygame.Rect((clippedX - self.img.get_height() / 2, clippedY - self.img.get_height() / 2), (self.img.get_width(), self.img.get_height()))
         if window.play == False and check_key_pressed(pygame.K_LSHIFT):
             # window.display.blit(self.img, (clippedX - self.img.get_height() / 2, clippedY - self.img.get_height() / 2))  
             pygame.draw.rect(window.display, (0,0,0), objectPreviewRect, 1) 
+
             if window.left_clicking == True:
-                if len(window.objects) == 0:
-                    window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction,animated=self.animated, anim_path=self.anim_path, collideable=self.is_Collideable))
-                else:
-                    for object in window.objects:
-                        curr_object = window.objects[object]
-                        if  self.check_mouse_inside(mouseX, mouseY, curr_object) == False:
-                            window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName ,self.objectType, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction,animated=self.animated, anim_path=self.anim_path, collideable=self.is_Collideable))
-                            break
+                window.createObject(OBJECT(f'Bin/assets/images/{self.selectedImageToAdd}', self.objectName ,self.objectType,self.obj_Category, start_pos=(clippedX + camX - self.img.get_width() / 2, clippedY + camY - self.img.get_height() / 2), function=self.objectFunction,animated=self.animated, anim_path=self.anim_path, collideable=self.is_Collideable))
             elif window.right_clicking == True:
                 for object in window.objects:
                     curr_object = window.objects[object]
@@ -671,20 +732,6 @@ class EDITOR():
                     elif button.name == 'Load_MAP':
                         window.loaded_map = input(f'{bcolors.HEADER}Load file name: {bcolors.ENDC}')
                         window.load_map(f'Bin/assets/data/{window.loaded_map}')
-                    elif button.name == 'Bind_Function':
-                        function = input(f'{bcolors.HEADER}Function name: {bcolors.ENDC}')
-                        self.objectFunction = function
-                    elif button.name == 'Remove_Function':
-                        self.objectFunction = None
-                    elif button.name == 'Static':
-                        self.objectType = 'static'
-                    elif button.name == 'Fluid':
-                        self.objectType = '!static'
-                    elif button.name == 'Add_Name':
-                        name = input(f"{bcolors.HEADER}Object's name: {bcolors.ENDC}")
-                        self.objectName = name
-                    elif button.name == 'Remove_Name':
-                        self.objectName = ''      
                     elif button.name == 'Images_Left':
                         if len(self.images) > 1:
                             if self.currImageList == 0:
@@ -699,7 +746,7 @@ class EDITOR():
                                 self.currImageList += 1
                     elif button.name == 'Modify_Object':
                         if self.selectedObject != '':
-                            propertie = input(f'{bcolors.HEADER}Property to modify(name/function/type/pos): {bcolors.ENDC}')
+                            propertie = input(f'{bcolors.HEADER}Property to modify(name/function/type/pos/collision/anim/category): {bcolors.ENDC}')
                             if propertie == 'name':
                                 window.objects[self.selectedObject].name = input(f'{bcolors.HEADER}Enter a new name(lower Case): {bcolors.ENDC}')
                             elif propertie == 'type':
@@ -712,22 +759,45 @@ class EDITOR():
                                         break
                             elif propertie == 'pos':
                                 window.objects[self.selectedObject].start_pos = (float(input(f'{bcolors.HEADER}Enter a new X coordinate: {bcolors.ENDC}')), float(input(f'{bcolors.HEADER}Enter a new Y coordinate: {bcolors.ENDC}')))
+                            elif propertie == 'collision':
+                                col = input('Is object collideable(True=1/False=2): ')
+                                if col == '1':
+                                    col = True
+                                else:
+                                    col = False
+                                window.objects[self.selectedObject].colldeable = col
+                            elif propertie == 'anim':
+                                anim = input("Animation folder name: ")
+                                if anim == '':
+                                    window.objects[self.selectedObject].animated = False
+                                else:
+                                    window.objects[self.selectedObject].animated = anim
+                                    window.objects[self.selectedObject].anim_path = False
+                            elif propertie == 'category':
+                                window.objects[self.selectedObject].category = input('Object Category(lowercase): ')
                             window.save_map(f'Bin/assets/data/{window.loaded_map}')
                             window.load_map(f'Bin/assets/data/{window.loaded_map}')
                         else:
                             print(f'{bcolors.WARNING}No object was selectionned.{bcolors.ENDC}')
                             print(f'{bcolors.WARNING}Please select an object to continue{bcolors.ENDC}')
-                    elif button.name == 'Collideable':
-                        self.is_Collideable = True
-                    elif button.name == '!Collideable':
-                        self.is_Collideable = False
-                    elif button.name == 'Animated':
-                        self.animated = True
-                        self.anim_path = 'Bin/assets/animations/' + input('Animations folder name: ')
-                    elif button.name == '!Animated':
-                        self.animated = False
-                        self.anim_path = None
-
+                    elif button.name == 'Modify_tile_Object':
+                        self.objectName = input("Object Name(lowercase): ")
+                        self.anim_path = input('Animation folder path: ')
+                        if self.anim_path == '':
+                            self.anim_path = None
+                        else:
+                            self.animated = True
+                        self.objectFunction = input("Function Name: ")
+                        if self.objectFunction == '':
+                            self.objectFunction = None
+                        self.is_Collideable = input("Is object collideable(True=1/False=2): ")
+                        if self.is_Collideable == '1':
+                            self.is_Collideable = True
+                        else:
+                            self.is_Collideable = False
+                        self.objectType = input("Object type(static or not): ")
+                        self.obj_Category = input("Object Category: ")
+                        
 
 class ANIMATOR():
     def __init__(self, anim_path, size) -> None:
@@ -741,11 +811,12 @@ class ANIMATOR():
             self.animStates[folder] = array
         self.currAnimState = None
         self.currFrame = 0
-        self.timeperFrame = 2
+        self.timeperFrame = 1
         self.currTime = 0
 
-    def changeAnimState(self, state):
+    def changeAnimState(self, state, time=1):
         self.currAnimState = state
+        self.timeperFrame = time
 
     def updateAnimations(self, deltatime):
         frame = self.animStates[self.currAnimState][self.currFrame]
@@ -762,17 +833,23 @@ class ANIMATOR():
 
 class UI:
     def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20) -> None:
-        self.xpos, self.ypos = pos
+        self.x, self.y = pos
         self.name = name
         self.color = color
+        self.font_size = font_size
+        self.font_path = font_path
         self.font = pygame.font.Font(font_path, font_size)
-        self.text = self.font.render(f'', True, self.color) 
+        self.text_content = ''
+        self.text = self.font.render(self.text_content, True, self.color) 
+        self.enabled = True
 
     def updateText(self, new_text):
-        self.text = self.font.render(new_text, True,self.color)
+        self.text_content = new_text
+        self.font = pygame.font.Font(self.font_path, self.font_size)
+        self.text = self.font.render(self.text_content, True,self.color)
 
     def position(self):
-        return self.xpos, self.ypos
+        return self.x, self.y
 
 class UITEXT(UI):
     def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20) -> None:
@@ -782,7 +859,6 @@ class UITEXT(UI):
 class UIBUTTON(UI):
     def __init__(self, name='', color=(255,255,255), font_path="Bin/assets/fonts/Roboto_Regular.ttf", pos=(0,0), font_size=20, button_width=100, button_heigth=30) -> None:
         super().__init__(name, color, font_path, pos, font_size)
-        self.x, self.y  = pos
         self.button_width = button_width
         self.button_height = button_heigth
 
