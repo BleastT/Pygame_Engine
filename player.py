@@ -8,18 +8,23 @@ def player(body):
 
         body.yspeed = 1
         body.score = 0
-        body.lives = 3
+        body.lives = 5
+
+        body.appRef.uiElements['score_text'].updateText(str(body.score))
+        body.appRef.uiElements['lives_nbr'].updateText(str(body.lives))
 
 
     def update():
+
+
         if Engine.check_key_pressed(Engine.pygame.K_w):
             body.move_by(0, -body.yspeed)
         else:
             body.move_by(0, 1)
 
         
-        if body.collided_with('enemy', 1) == True:
-            if body.lives <= 0:
+        if body.collided_with('enemy', 1, True) == True:
+            if body.lives < 1:
                 body.appRef.play = False
                 body.appRef.uiElements['start_text'].x = 3
                 body.appRef.uiElements['start_text'].y = 24
@@ -29,11 +34,20 @@ def player(body):
                 body.delete()
             else:
                 body.lives -= 1
+                body.appRef.uiElements['lives_nbr'].updateText(str(body.lives))
 
-        if body.collided_with('score', 1) == True:
+        if body.collided_with('score', 1, True) == True:
             body.score += 1
-            body.appRef.objects['spawner'].enemy_timer -= .01
-            body.appRef.objects['spawner'].score_timer += .01
+            body.appRef.objects['spawner'].enemy_timer -= .03
+            body.appRef.objects['spawner'].score_timer += .03
+            body.appRef.uiElements['score_text'].updateText(str(body.score))
+
+
+        if body.rect.y <= 0:
+            body.move_to(body.rect.x, 0)
+        elif body.rect.y + body.height >= 64:
+            body.move_to(body.rect.x, 64 - body.height)
+
 
 
     

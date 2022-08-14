@@ -1,4 +1,3 @@
-from unicodedata import category
 import pygame
 import sys
 import math
@@ -148,6 +147,7 @@ def read_from_file(path):
 class APPLICATION():
     
     pygame.init()
+
 
     def __init__(self, screenRes, displayRes,max_fps = 60, show_fps=False, edit_mode=False, editor_width=430, editor_height=220  , window_name='pygame window') -> None:
              ##WINDOW PARAMETERS AND VARIABLES
@@ -563,10 +563,12 @@ class OBJECT():
         return hitlist
 
 
-    def collided_with(self, name, type=0):
+    def collided_with(self, name, type=0, delete=False):
         for col in self.all_collision:
             if col[type] == name:
-                return True
+                if delete == True:
+                    self.appRef.objects[col[0]].delete()
+                    return True
 class EDITOR():
 
     def __init__(self,window) -> None:
@@ -708,7 +710,9 @@ class EDITOR():
                     self.selectedImageToAdd = image
                     self.img = pygame.image.load(f'Bin/assets/images/{self.selectedImageToAdd}')
                     window.editoruiElements['Object image'].updateText(f'Object image: {self.selectedImageToAdd}')
-            window.screen.blit(image_, (xOffset + 30, window.screenY + 20))
+            rect = pygame.Rect((xOffset + 30, window.screenY + 20), image_.get_size())
+            window.screen.blit(image_, (rect.x, rect.y))
+            pygame.draw.rect(window.screen, (255,255,255), rect, 1)
             xOffset += image_.get_width() + 15
 
         self.check_editor_buttons(window)
@@ -746,7 +750,7 @@ class EDITOR():
                                 self.currImageList += 1
                     elif button.name == 'Modify_Object':
                         if self.selectedObject != '':
-                            propertie = input(f'{bcolors.HEADER}Property to modify(name/function/type/pos/collision/anim/category): {bcolors.ENDC}')
+                            propertie = input(f'{bcolors.HEADER}Property to modify(name/function/type/pos/collision/anim/category/image): {bcolors.ENDC}')
                             if propertie == 'name':
                                 window.objects[self.selectedObject].name = input(f'{bcolors.HEADER}Enter a new name(lower Case): {bcolors.ENDC}')
                             elif propertie == 'type':
@@ -760,43 +764,48 @@ class EDITOR():
                             elif propertie == 'pos':
                                 window.objects[self.selectedObject].start_pos = (float(input(f'{bcolors.HEADER}Enter a new X coordinate: {bcolors.ENDC}')), float(input(f'{bcolors.HEADER}Enter a new Y coordinate: {bcolors.ENDC}')))
                             elif propertie == 'collision':
-                                col = input('Is object collideable(True=1/False=2): ')
+                                col = input(f'{bcolors.HEADER}Is object collideable(True=1/False=2): {bcolors.ENDC}')
                                 if col == '1':
                                     col = True
                                 else:
                                     col = False
                                 window.objects[self.selectedObject].colldeable = col
                             elif propertie == 'anim':
-                                anim = input("Animation folder name: ")
+                                anim = input(f"{bcolors.HEADER}Animation folder name: {bcolors.ENDC}")
                                 if anim == '':
                                     window.objects[self.selectedObject].animated = False
                                 else:
                                     window.objects[self.selectedObject].animated = anim
                                     window.objects[self.selectedObject].anim_path = False
                             elif propertie == 'category':
-                                window.objects[self.selectedObject].category = input('Object Category(lowercase): ')
+                                window.objects[self.selectedObject].category = input(f'{bcolors.HEADER}Object Category(lowercase): {bcolors.ENDC}')
+                            elif propertie == 'image':
+                                window.objects[self.selectedObject].img_path = input('Image Path: ')
+                                window.objects[self.selectedObject].image = pygame.image.load(window.objects[self.selectedObject].img_path)
                             window.save_map(f'Bin/assets/data/{window.loaded_map}')
                             window.load_map(f'Bin/assets/data/{window.loaded_map}')
+
                         else:
                             print(f'{bcolors.WARNING}No object was selectionned.{bcolors.ENDC}')
                             print(f'{bcolors.WARNING}Please select an object to continue{bcolors.ENDC}')
+                        
                     elif button.name == 'Modify_tile_Object':
-                        self.objectName = input("Object Name(lowercase): ")
-                        self.anim_path = input('Animation folder path: ')
+                        self.objectName = input(f"{bcolors.HEADER}Object Name(lowercase): {bcolors.ENDC}")
+                        self.anim_path = input(f'{bcolors.HEADER}Animation folder path: {bcolors.ENDC}')
                         if self.anim_path == '':
                             self.anim_path = None
                         else:
                             self.animated = True
-                        self.objectFunction = input("Function Name: ")
+                        self.objectFunction = input(f"{bcolors.HEADER}Function Name: {bcolors.ENDC}")
                         if self.objectFunction == '':
                             self.objectFunction = None
-                        self.is_Collideable = input("Is object collideable(True=1/False=2): ")
+                        self.is_Collideable = input(f"{bcolors.HEADER}Is object collideable(True=1/False=2): {bcolors.ENDC}")
                         if self.is_Collideable == '1':
                             self.is_Collideable = True
                         else:
                             self.is_Collideable = False
-                        self.objectType = input("Object type(static or not): ")
-                        self.obj_Category = input("Object Category: ")
+                        self.objectType = input(f"{bcolors.HEADER}Object type(static or not): {bcolors.ENDC}")
+                        self.obj_Category = input(f"{bcolors.HEADER}Object Category: {bcolors.ENDC}")
                         
 
 class ANIMATOR():
